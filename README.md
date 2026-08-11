@@ -4,7 +4,7 @@
 
 It gives quick access to frequently used actions through **two configurable wheels**, with **24 saved assignment positions total** and **4 to 12 visible slots per wheel**. PalWheel is designed primarily for controller use, while still supporting keyboard and mouse.
 
-> **Current version:** 1.0  
+> **Current version:** 1.1  
 > **Author:** CHUBBYALVIN  
 > **Platform:** Palworld for Windows  
 > **Framework:** UE4SS
@@ -21,6 +21,9 @@ It gives quick access to frequently used actions through **two configurable whee
 - Automatic saving of user settings and assignments
 - Configurable wheel skins
 - Configurable controls, stick deadzones, movement allowlists and slow-motion behavior
+- In-game **Slow Motion toggle**
+- Automatic multiplayer detection; slow motion is disabled in multiplayer
+- Improved controller input handling and camera stability when slow motion is unavailable
 - Weapon, Pal and sphere hover/selection previews
 - Input and camera handling while the wheel is open
 - Separate user-generated settings and assignment files
@@ -104,27 +107,30 @@ This keeps Pal summoning available on D-pad Left while freeing L1 / LB for PalWh
 
 ### Custom trigger keys
 
-PalWheel's trigger controls can be changed in:
+For personal key bindings, first launch Palworld and enter a world once after installing PalWheel. This generates:
 
 ```text
-Scripts\mappings.lua
+PalWheel\Saved\settings.lua
 ```
 
-Controller defaults:
+Close the game before editing this file.
+
+The generated `settings.lua` contains the user-facing trigger bindings, including:
 
 ```lua
 controllerOpenButton = "Gamepad_LeftShoulder",
 controllerPageButton = "Gamepad_RightShoulder",
-```
+   
 
-Keyboard/mouse defaults:
+						
 
-```lua
+	  
 openKey = "CAPS_LOCK",
 keyboardPageButton = "RIGHT_MOUSE_BUTTON",
 ```
 
-Users are free to remap these values to other supported key names if they prefer a different layout.
+Change these values in `Saved\settings.lua` if you prefer a different controller or keyboard/mouse layout. 
+
 
 ---
 
@@ -140,6 +146,9 @@ The editor lets you:
 - Change the number of visible slots per wheel from **4 to 12**
 - Select an installed wheel skin
 - Save assignments, slot count and wheel skin automatically
+- Enable or disable **Slow Motion**
+
+> **Multiplayer:** Slow Motion is automatically disabled when PalWheel detects multiplayer, regardless of this setting.
 
 The editor uses direct mouse clicks for assignment changes.
 
@@ -151,9 +160,10 @@ While PalWheel is open:
 
 - Mouse direction or Right Stick direction selects a slot around the wheel.
 - The camera is clamped while the wheel is active.
-- Configurable slow motion can be applied.
+- Slow Motion can be enabled or disabled from the assignment editor.
+- When multiplayer is detected, PalWheel automatically disables slow motion regardless of the saved setting.
 - Allowed movement inputs can remain active.
-- Other tracked inputs can be blocked, ignored or used to close the wheel.
+- On controller, most other buttons close PalWheel and continue to their normal game action.
 - Weapon, Pal and sphere slots can preview their selection when highlighted.
 - Pal actions select the corresponding party slot and summon the Pal near the player.
 - Sphere actions check inventory and attempt to equip the selected sphere type.
@@ -290,14 +300,14 @@ PalWheel\
 | `main.lua` | Core state, saved data, action catalogue, UMG construction, UI guards and wheel/editor lifecycle |
 | `config.lua` | Packaged defaults for layout, appearance, timing and features |
 | `mappings.lua` | Keyboard, mouse and controller mappings and menu shortcut definitions |
-| `controller.lua` | Controller session capture, radial selection, page switching and input suppression |
+| `controller.lua` | Controller session handling, radial selection, page switching and close-on-button behavior |
 | `input_runtime.lua` | Keyboard/mouse polling, release activation and wheel-session handling |
 | `editor_builder.lua` | F7 editor, assignment rows, grouped function picker and dropdowns |
 | `wheel_visuals.lua` | Wheel centre details, direction visuals, selection styling and reveal behavior |
 | `menu_actions.lua` | Deferred menu actions, DLL loading and keyboard toggle restoration |
 | `pal_actions.lua` | Party lookup, Pal selection and summoning |
 | `sphere_actions.lua` | Sphere ownership checks, cycling and verification |
-| `runtime_loops.lua` | Recurring normal and fast update loops |
+| `runtime_loops.lua` | Recurring selection, input and camera update loops |
 | `keyinject.dll` | Windows x64 helper used by supported deferred key actions and keyboard-state restoration |
 
 ---
@@ -344,7 +354,7 @@ and that the skin name matches the saved setting.
 
 ## Planned / Possible Future Updates
 
-PalWheel v1.0 focuses on a stable, configurable action wheel without slot icons.
+PalWheel v1.1 focuses on a stable, configurable action wheel without slot icons.
 
 Ideas being explored for future versions include:
 
