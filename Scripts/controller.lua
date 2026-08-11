@@ -33,16 +33,10 @@ function Controller.new(options)
         openLatchDown = false,
         pageWasDown = false,
         axisFailureLogged = false,
-        suppressedMappings = {},
-        blockedInputKeys = {},
-        blockedInputKeyNames = {},
         configuredCancelInputs = {},
         sessionCancelInputs = {},
         cancelInputKeyNames = {},
         cancelWasDown = {},
-        gameplayMappingsSuppressed = false,
-        gameplayMappingFailureLogged = false,
-        inputReleaseGuard = false,
         cameraNeutralGuard = false,
         guardAxisFailureLogged = false,
         peakStickMagnitude = 0.0,
@@ -83,17 +77,9 @@ function Controller.new(options)
             }
         end
     end
-    self:installAttackGuards()
     return self
 end
 
-function Controller:addBlockedInputKey(name, key)
-    local normalized = normalizedKeyName(name)
-    if normalized == "" or self.blockedInputKeyNames[normalized] == true
-        or key == nil then return end
-    self.blockedInputKeyNames[normalized] = true
-    self.blockedInputKeys[#self.blockedInputKeys + 1] = key
-end
 
 function Controller:addSessionCancelInput(name, key)
     local normalized = normalizedKeyName(name)
@@ -114,145 +100,34 @@ end
 function Controller:seedConfiguredCancelInputs()
     for _, input in ipairs(self.configuredCancelInputs or {}) do
         self:addSessionCancelInput(input.name, input.key)
-        self:addBlockedInputKey(input.name, input.key)
     end
 end
 
-function Controller:installAttackGuards()
-    if type(RegisterHook) ~= "function" then return end
 
-    local function muteTransition(shooter, isShootingParam, canShootOnReleaseParam)
-        if (not self.session and not self.gameplayMappingsSuppressed)
-            or self.o.cfg("controllerSuppressAllGameplayInput", true) ~= true then
-            return
-        end
-        pcall(function() isShootingParam:set(false) end)
-        pcall(function() canShootOnReleaseParam:set(false) end)
-        if self.o.alive(shooter) then
-            pcall(function() shooter:SetShootingHold(false) end)
-        end
-    end
-
-    pcall(function()
-        RegisterHook("/Script/Pal.PalShooterComponent:ChangeIsShooting_ToServer",
-            function(context, _, isShootingParam, canShootOnReleaseParam)
-                local shooter = nil
-                pcall(function() shooter = context:get() end)
-                muteTransition(shooter, isShootingParam, canShootOnReleaseParam)
-            end)
-    end)
-    pcall(function()
-        RegisterHook("/Script/Pal.PalPlayerController:ShooterComponent_ChangeIsShooting_ToServer",
-            function(_, shooterParam, _, isShootingParam, canShootOnReleaseParam)
-                local shooter = nil
-                pcall(function() shooter = shooterParam:get() end)
-                muteTransition(shooter, isShootingParam, canShootOnReleaseParam)
-            end)
-    end)
-end
-
-function Controller:suppressGameplayMappings(pc)
-    self:restoreGameplayMappings()
-    self:seedConfiguredCancelInputs()
-    if self.o.cfg("controllerSuppressAllGameplayInput", true) ~= true
-        or not self.o.alive(pc) then
-        return
-    end
-
-    local playerInput = nil
-    local mappings = nil
-    pcall(function() playerInput = pc.PlayerInput end)
-    if self.o.alive(playerInput) then
-        pcall(function() mappings = playerInput.EnhancedActionMappings end)
-    end
-    if mappings == nil then
-        if not self.gameplayMappingFailureLogged then
-            self.gameplayMappingFailureLogged = true
-            self.o.log("Controller gameplay mapping suppression unavailable; attack fallback remains active", true)
-        end
-        return
-    end
-
-    local matched = 0
-    local ok = pcall(function()
-        mappings:ForEach(function(_, element)
-            local mapping = element:get()
-            if mapping == nil then return end
-
-            local keyText = ""
-            pcall(function() keyText = tostring(mapping.Key.KeyName or "") end)
-            keyText = string.gsub(keyText, "^FName%((.*)%)$", "%1")
-            local keyName = normalizedKeyName(keyText)
-            if string.sub(keyName, 1, 7) ~= "gamepad"
-                or self.movementKeyNames[keyName] == true then
-                return
-            end
-
-            local previous = false
-            pcall(function() previous = mapping.bShouldBeIgnored == true end)
-            local changed = pcall(function() mapping.bShouldBeIgnored = true end)
-            local confirmed = false
-            pcall(function() confirmed = mapping.bShouldBeIgnored == true end)
-            if changed and confirmed then
-                self.suppressedMappings[#self.suppressedMappings + 1] = {
-                    mapping = mapping,
-                    previous = previous,
-                }
-                if keyText ~= "" then
-                    local okKey, key = pcall(self.o.makeFKey, keyText)
-                    if okKey and key ~= nil then
-                        self:addBlockedInputKey(keyText, key)
-                        self:addSessionCancelInput(keyText, key)
-                    end
-                end
-                matched = matched + 1
-            end
-        end)
-    end)
-
-    self.gameplayMappingsSuppressed = ok and matched > 0
-    if not self.gameplayMappingsSuppressed and not self.gameplayMappingFailureLogged then
-        self.gameplayMappingFailureLogged = true
-        self.o.log("Could not mute controller Enhanced Input mappings; attack fallback remains active", true)
-    end
-end
-
-function Controller:restoreGameplayMappings()
-    for _, entry in ipairs(self.suppressedMappings or {}) do
-        if entry and entry.mapping ~= nil then
-            pcall(function()
-                entry.mapping.bShouldBeIgnored = entry.previous == true
-            end)
-        end
-    end
-    self.suppressedMappings = {}
-    self.blockedInputKeys = {}
-    self.blockedInputKeyNames = {}
+function Controller:prepareCancelInputs()
     self.sessionCancelInputs = {}
     self.cancelInputKeyNames = {}
     self.cancelWasDown = {}
-    self.gameplayMappingsSuppressed = false
+    self:seedConfiguredCancelInputs()
 end
 
-function Controller:anyBlockedInputActive(pc)
-    if not self.o.alive(pc) then return false end
-    for _, key in ipairs(self.blockedInputKeys or {}) do
-        local analog = readAnalog(self, pc, key)
-        if analog ~= nil and math.abs(analog) >= 0.10 then return true end
-        if self.o.isKeyDown(pc, key) then return true end
-    end
-    return false
+function Controller:clearCancelInputs()
+    self.sessionCancelInputs = {}
+    self.cancelInputKeyNames = {}
+    self.cancelWasDown = {}
 end
 
 function Controller:isCancelInputActive(pc, input)
     if input == nil or input.key == nil then return false end
+    local threshold = self.o.clamp(
+        self.o.cfg("controllerCancelAnalogThreshold", 0.18), 0.05, 0.90)
     if string.find(input.normalized or "", "axis", 1, true) then
-        local threshold = self.o.clamp(
-            self.o.cfg("controllerCancelAnalogThreshold", 0.18), 0.05, 0.90)
         local analog = readAnalog(self, pc, input.key)
         return analog ~= nil and math.abs(analog) >= threshold
     end
-    return self.o.isKeyDown(pc, input.key)
+    if self.o.isKeyDown(pc, input.key) then return true end
+    local analog = readAnalog(self, pc, input.key)
+    return analog ~= nil and math.abs(analog) >= 0.50
 end
 
 function Controller:anyCancelInputActive(pc)
@@ -301,12 +176,11 @@ function Controller:begin(pc)
     self.openLatchDown = self.o.isKeyDown(pc, self.openKey)
     self.pageWasDown = self.o.isKeyDown(pc, self.pageKey)
     self.axisFailureLogged = false
-    self.inputReleaseGuard = false
     self.cameraNeutralGuard = false
     self.guardAxisFailureLogged = false
     self.peakStickMagnitude = 0.0
     self.peakStickSelection = nil
-    self:suppressGameplayMappings(pc)
+    self:prepareCancelInputs()
     self:primeCancelInputLatches(pc)
 end
 
@@ -318,6 +192,7 @@ function Controller:finish(pc)
     self.axisFailureLogged = false
     self.peakStickMagnitude = 0.0
     self.peakStickSelection = nil
+
     if wasSession and self.o.alive(pc) then
         local axisX = readAnalog(self, pc, self.axisXKey)
         local axisY = readAnalog(self, pc, self.axisYKey)
@@ -328,15 +203,11 @@ function Controller:finish(pc)
         else
             self.cameraNeutralGuard = false
         end
-        self.inputReleaseGuard = self.o.isKeyDown(pc, self.openKey)
-            or self.o.isKeyDown(pc, self.pageKey)
-            or self:anyBlockedInputActive(pc)
-            or self:anyCancelInputActive(pc)
     else
-        self.inputReleaseGuard = false
         self.cameraNeutralGuard = false
     end
-    if not self.inputReleaseGuard then self:restoreGameplayMappings() end
+
+    self:clearCancelInputs()
 end
 
 function Controller:reset()
@@ -344,34 +215,21 @@ function Controller:reset()
     self.openSawDown = false
     self.pageWasDown = false
     self.axisFailureLogged = false
-    self.inputReleaseGuard = false
     self.cameraNeutralGuard = false
     self.guardAxisFailureLogged = false
     self.peakStickMagnitude = 0.0
     self.peakStickSelection = nil
     self.cancelWasDown = {}
-    self:restoreGameplayMappings()
+    self:clearCancelInputs()
     self.openLatchDown = false
 end
+
 
 function Controller:isCameraNeutralGuardActive()
     return self.cameraNeutralGuard == true
 end
 
 function Controller:updateReleaseGuards(pc)
-    if self.inputReleaseGuard then
-        if not self.o.alive(pc) then
-            self.inputReleaseGuard = false
-            self:restoreGameplayMappings()
-        elseif not self.o.isKeyDown(pc, self.openKey)
-            and not self.o.isKeyDown(pc, self.pageKey)
-            and not self:anyBlockedInputActive(pc)
-            and not self:anyCancelInputActive(pc) then
-            self.inputReleaseGuard = false
-            self:restoreGameplayMappings()
-        end
-    end
-
     if not self.cameraNeutralGuard then return end
     if not self.o.alive(pc) then
         self.cameraNeutralGuard = false

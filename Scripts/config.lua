@@ -1,6 +1,6 @@
 return {
     enabled = true,
-    version = "1.0",
+    version = "1.1",
 
     screenWidth = 1920,
     screenHeight = 1080,
@@ -45,7 +45,6 @@ return {
     controllerEarlyReturnSelect = true,
     controllerEarlyReturnArmMagnitude = 0.60,
     controllerEarlyReturnFraction = 0.25,
-    controllerSuppressAllGameplayInput = true,
     controllerCancelAnalogThreshold = 0.18,
 
     hideHardwareCursorWhileOpen = true,

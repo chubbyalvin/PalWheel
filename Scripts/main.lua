@@ -393,6 +393,8 @@ local state = {
     editorSkinText = nil,
     editorSkinDropdownRect = nil,
     editorSkinDropdownOpen = false,
+    editorSlowMotionText = nil,
+    editorSlowMotionRect = nil,
     editorSkinDropdownWidgets = {},
     editorSkinOptionRects = {},
     editorPickerOpen = false,
@@ -1211,8 +1213,49 @@ local function getWidgetLayoutLibrary()
     return cls("/Script/UMG.Default__WidgetLayoutLibrary")
 end
 
+local function getServerMode(pc)
+    if not alive(pc) then return "unknown" end
+
+    local world = nil
+    pcall(function() world = pc:GetWorld() end)
+    if not alive(world) then return "unknown" end
+
+    local netDriver = nil
+    pcall(function() netDriver = world.NetDriver end)
+    if not alive(netDriver) then return "singleplayer" end
+
+    local serverConnection = nil
+    pcall(function() serverConnection = netDriver.ServerConnection end)
+    if alive(serverConnection) then return "coop_client" end
+
+    local palUtility = cls("/Script/Pal.Default__PalUtility")
+    if alive(palUtility) then
+        local okMode, netModeString = pcall(function()
+            return palUtility:GetNetMode(world)
+        end)
+        if okMode then
+            local mode = tostring(netModeString or ""):lower()
+            if mode:find("dedicated") then return "dedicated" end
+        end
+    end
+
+    return "coop_host"
+end
+
+local function isMultiplayer(pc)
+    local mode = getServerMode(pc)
+    return mode == "coop_client" or mode == "coop_host" or mode == "dedicated", mode
+end
+
 local function applySlowMotion(pc)
     if cfg("slowMotionEnabled", true) ~= true or not alive(pc) then return false end
+
+    local multiplayer, mode = isMultiplayer(pc)
+    if multiplayer then
+        log("Multiplayer detected (" .. tostring(mode)
+            .. ") - slow motion disabled.", true)
+        return false
+    end
 
     local gameplayStatics = getGameplayStatics()
     if not alive(gameplayStatics) then
@@ -1687,6 +1730,8 @@ local function destroyWidget()
     state.editorSkinText = nil
     state.editorSkinDropdownRect = nil
     state.editorSkinDropdownOpen = false
+    state.editorSlowMotionText = nil
+    state.editorSlowMotionRect = nil
     state.editorSkinDropdownWidgets = {}
     state.editorSkinOptionRects = {}
     state.editorPickerOpen = false
@@ -2234,6 +2279,13 @@ local function updateEditorSkinText()
     end
 end
 
+local function updateEditorSlowMotionText()
+    if alive(state.editorSlowMotionText) then
+        setText(state.editorSlowMotionText,
+            cfg("slowMotionEnabled", true) == true and "ON" or "OFF")
+    end
+end
+
 local function updateEditorRow(slotIndex)
     local row = state.editorRows[slotIndex]
     if row == nil then return end
@@ -2271,6 +2323,7 @@ local function buildEditorWidget(pc)
                 colorForDefinition = colorForDefinition,
                 updateCountText = updateEditorCountText,
                 updateSkinText = updateEditorSkinText,
+                updateSlowMotionText = updateEditorSlowMotionText,
                 wheelSkins = WHEEL_SKINS,
                 updateRow = updateEditorRow,
                 hitTestInvisible = VIS_HIT_TEST_INVISIBLE,
@@ -2350,6 +2403,24 @@ local function buildEditorWidget(pc)
             state.editorPlusRect = { x = plusX, y = countY, w = buttonW, h = buttonH }
         end
     end
+
+    createEditorText(tree, root, "SLOW MOTION", 1300, 195, 130, 30, 16)
+    local slowMotionBorder = construct("/Script/UMG.Border", tree)
+    if alive(slowMotionBorder) then
+        local slowMotionSlot = addToCanvas(root, slowMotionBorder)
+        if slowMotionSlot ~= nil then
+            place(slowMotionSlot, 1430, 188, 150, 42)
+            setBorderColor(slowMotionBorder, COLORS.button)
+            pcall(function() slowMotionBorder:SetVisibility(VIS_HIT_TEST_INVISIBLE) end)
+        end
+    end
+    state.editorSlowMotionText = createEditorText(
+        tree, root, "", 1448, 195, 114, 30, 18)
+    state.editorSlowMotionRect = { x = 1430, y = 188, w = 150, h = 42 }
+    updateEditorSlowMotionText()
+    createEditorText(tree, root,
+        "Always disabled in multiplayer.",
+        1300, 232, 320, 24, 11)
 
     local tableY = 270
     local leftX, rightX = 190, 985
@@ -2574,6 +2645,7 @@ end
 local function refreshEditorRows()
     updateEditorCountText()
     updateEditorSkinText()
+    updateEditorSlowMotionText()
     for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
         updateEditorRow(slotIndex)
     end
@@ -2668,6 +2740,14 @@ local function handleEditorClick(direction)
     if pointInRect(x, y, state.editorSkinDropdownRect) then
         setEditorDropdownVisible("count", false)
         setEditorDropdownVisible("skin", true)
+        return
+    end
+    if pointInRect(x, y, state.editorSlowMotionRect) then
+        config.slowMotionEnabled = cfg("slowMotionEnabled", true) ~= true
+        updateEditorSlowMotionText()
+        saveSettings()
+        log("Slow motion setting changed to "
+            .. (config.slowMotionEnabled and "ON" or "OFF"), true)
         return
     end
     if pointInRect(x, y, state.editorMinusRect) then
@@ -2872,11 +2952,11 @@ local function openWheel(pc, inputSource)
     applySlowMotion(pc)
     beginCameraLock(pc)
     blockGameplayInput(pc)
-    applyUIOnlyInput(pc, true)
     if inputSource == "controller" then
         state.keyboardCancelWasDown = {}
         state.controller:begin(pc)
     else
+        applyUIOnlyInput(pc, true)
         state.controller:finish(pc)
         refreshMovementKeysAllowedWhileOpen(pc)
         state.inputRuntime:beginKeyboard(pc)
@@ -3087,13 +3167,12 @@ function state.tick()
 
     if state.selectionCommitted then return end
 
-    applyUIOnlyInput(pc, false)
-
     if state.controller:isSession() then
         state.controller:tickOpen(pc)
         return
     end
 
+    applyUIOnlyInput(pc, false)
     state.inputRuntime:pollKeyboardWheel(pc)
 end
 
@@ -3120,6 +3199,14 @@ function state.fastTick()
     enforceCameraLock()
 end
 
+function state.fastCameraTick()
+    if state.open
+        and state.controller:isSession()
+        and state.slowMotionApplied ~= true then
+        enforceCameraLock()
+    end
+end
+
 function state.startRuntimeLoops()
     local okRuntime, RuntimeLoops = pcall(require, "runtime_loops")
     if not okRuntime or type(RuntimeLoops) ~= "table"
@@ -3132,6 +3219,7 @@ function state.startRuntimeLoops()
     state.runtimeLoops = RuntimeLoops.new({
         selectionTick = state.tick,
         fastTick = state.fastTick,
+        fastCameraTick = state.fastCameraTick,
         executeInGameThread = ExecuteInGameThread,
         log = log,
         fastFailureWasLogged = function()
@@ -3142,7 +3230,7 @@ function state.startRuntimeLoops()
         end,
     })
     local loopMode, loopError = state.runtimeLoops:start(
-        state.interval, state.cameraLockInterval)
+        state.interval, state.cameraLockInterval, 4)
     if loopMode == nil then
         log("FATAL: PalWheel runtime loops did not start: "
             .. tostring(loopError), true)

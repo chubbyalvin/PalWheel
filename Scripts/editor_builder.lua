@@ -95,6 +95,16 @@ function Builder:start(pc)
     state.editorSkinDropdownRect = { x = 1120, y = 188, w = 250, h = 42 }
     o.updateSkinText()
 
+    o.createText(state.tree, editorPanel, "SLOW MOTION", 1400, 195, 130, 30, 16)
+    local slowMotionBorder
+    slowMotionBorder, state.editorSlowMotionText = self:cell(
+        1570, 188, 110, 42, o.colors.button, "", 18)
+    state.editorSlowMotionRect = { x = 1570, y = 188, w = 110, h = 42 }
+    o.updateSlowMotionText()
+    o.createText(state.tree, editorPanel,
+        "Always disabled in multiplayer.",
+        1400, 232, 300, 24, 11)
+
     for page = 1, 2 do
         local x = page == 1 and 190 or 985
         self:cell(x, 270, 745, 42, o.colors.button,
