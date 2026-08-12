@@ -163,7 +163,9 @@ function Visuals:updateHighlight(definition, selected, page, sectors, palName)
     self.page = page or 1
     self.sectors = sectors
     if selected == nil then
-        self.o.setText(self.title, self.page == 1 and "I" or "II")
+        local pageLabel = self.page == 1 and "I"
+            or (self.page == 2 and "II" or "III")
+        self.o.setText(self.title, pageLabel)
         self.o.setText(self.subtitle, "")
         safe(function() self.title:SetRenderTranslation({ X = 0.0,
             Y = tonumber(self.o.cfg("centerPageNumeralYOffset", 7)) or 7 }) end)

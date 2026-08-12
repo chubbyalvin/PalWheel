@@ -1,6 +1,6 @@
 return {
     enabled = true,
-    version = "1.1",
+    version = "1.2",
 
     screenWidth = 1920,
     screenHeight = 1080,
@@ -8,6 +8,10 @@ return {
     centerY = 540,
 
     visibleSlotCount = 12,
+    wheel1SlotCount = 12,
+    wheel2SlotCount = 12,
+    wheel3SlotCount = 12,
+    wheelCount = 3,
     wheelInnerRadius = 88,
     wheelOuterRadius = 270,
     wheelSkin = "wheel_02.png",

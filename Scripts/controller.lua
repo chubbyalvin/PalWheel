@@ -285,10 +285,15 @@ function Controller:updateSelection(pc)
         local angle = math.atan(axisY, axisX)
         local bestIndex = nil
         local bestDistance = math.huge
-        for index = 1, state.visibleSlotCount do
+        local visibleCount = type(self.o.visibleSlotCount) == "function"
+            and tonumber(self.o.visibleSlotCount()) or nil
+        visibleCount = math.floor(self.o.clamp(
+            visibleCount or 12, 4, 12))
+
+        for index = 1, visibleCount do
             local slotAngle = math.rad(tonumber(self.o.cfg(
                 "wheelSlotOneAngleDegrees", 180)) or 180)
-                - ((index - 1) * self.o.twoPi / state.visibleSlotCount)
+                - ((index - 1) * self.o.twoPi / visibleCount)
             local distance = self.o.angularDistance(angle, slotAngle)
             if distance < bestDistance then
                 bestDistance = distance

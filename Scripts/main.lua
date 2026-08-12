@@ -104,7 +104,7 @@ end
 
 local savedSettings = loadSavedSettings()
 local settingsNeedsMigration = settingsFileLoaded
-    and (tonumber(savedSettings.settingsFormatVersion or savedSettings.version) or 0) ~= 1
+    and (tonumber(savedSettings.settingsFormatVersion or savedSettings.version) or 0) ~= 2
 
 local SAVED_CONFIG_FIELDS = {
     "openKey", "keyboardPageButton", "settingsKey",
@@ -140,7 +140,8 @@ local VIS_HIDE = 1
 local VIS_HIT_TEST_INVISIBLE = 3
 local TWO_PI = math.pi * 2.0
 local PAGE_SIZE = 12
-local TOTAL_ASSIGNMENT_SLOTS = 24
+local PAGE_COUNT = 3
+local TOTAL_ASSIGNMENT_SLOTS = PAGE_SIZE * PAGE_COUNT
 local MIN_VISIBLE_SLOTS = 4
 local MAX_VISIBLE_SLOTS = 12
 local MOUSE_LOCK_DO_NOT_LOCK = 0
@@ -199,6 +200,8 @@ local COLORS = {
         A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
     utility = { R = 0.78, G = 0.34, B = 0.08,
         A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
+    emote = { R = 0.58, G = 0.38, B = 0.72,
+        A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
     sphere = { R = 0.04, G = 0.55, B = 0.68,
         A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
     empty = { R = 0.16, G = 0.18, B = 0.22,
@@ -249,6 +252,15 @@ local FUNCTION_CATALOG = {
     { id = "sphere_exotic", label = "Exotic Sphere", short = "EXOTIC\nCR50", kind = "sphere", sphereId = "PalSphere_Exotic", sphereName = "Exotic Sphere", sphereShort = "Exotic", captureRate = "50" },
     { id = "sphere_sol", label = "Sol Sphere", short = "SOL\nCR58", kind = "sphere", sphereId = "PalSphere_Ancient_1", sphereName = "Sol Sphere", sphereShort = "Sol", captureRate = "58" },
     { id = "sphere_ancient", label = "Ancient Sphere", short = "ANCIENT\nCR64", kind = "sphere", sphereId = "PalSphere_Ancient_2", sphereName = "Ancient Sphere", sphereShort = "Ancient", captureRate = "64" },
+    { id = "emote_0", label = "Beckon", short = "BECKON", kind = "emote", emoteIndex = 0 },
+    { id = "emote_1", label = "Dance", short = "DANCE", kind = "emote", emoteIndex = 1 },
+    { id = "emote_2", label = "Wave", short = "WAVE", kind = "emote", emoteIndex = 2 },
+    { id = "emote_3", label = "Sit in Chair", short = "SIT IN\nCHAIR", kind = "emote", emoteIndex = 3 },
+    { id = "emote_4", label = "Sit on Ground", short = "SIT ON\nGROUND", kind = "emote", emoteIndex = 4 },
+    { id = "emote_5", label = "Surprised", short = "SURPRISED", kind = "emote", emoteIndex = 5 },
+    { id = "emote_6", label = "Hand Over", short = "HAND OVER", kind = "emote", emoteIndex = 6 },
+    { id = "emote_7", label = "Sleep", short = "SLEEP", kind = "emote", emoteIndex = 7 },
+    { id = "emote_8", label = "Kick", short = "KICK", kind = "emote", emoteIndex = 8 },
 }
 
 local FUNCTION_BY_ID = {}
@@ -294,12 +306,22 @@ local function makeValidatedAssignments(saved)
     return values
 end
 
-local initialVisibleSlotCount = savedSettings.visibleSlotCount
-if type(initialVisibleSlotCount) ~= "number" then
-    initialVisibleSlotCount = savedSettings["visibleSli" .. "ceCount"]
+local legacyVisibleSlotCount = savedSettings.visibleSlotCount
+if type(legacyVisibleSlotCount) ~= "number" then
+    legacyVisibleSlotCount = savedSettings["visibleSli" .. "ceCount"]
 end
-if type(initialVisibleSlotCount) ~= "number" then
-    initialVisibleSlotCount = cfg("visibleSlotCount", 9)
+if type(legacyVisibleSlotCount) ~= "number" then
+    legacyVisibleSlotCount = cfg("visibleSlotCount", 12)
+end
+
+local initialVisibleSlotCounts = {}
+for page = 1, PAGE_COUNT do
+    local key = "wheel" .. tostring(page) .. "SlotCount"
+    local value = savedSettings[key]
+    if type(value) ~= "number" then value = cfg(key, nil) end
+    if type(value) ~= "number" then value = legacyVisibleSlotCount end
+    initialVisibleSlotCounts[page] = math.floor(clamp(
+        value, MIN_VISIBLE_SLOTS, MAX_VISIBLE_SLOTS))
 end
 
 local assignmentsFileLoaded = false
@@ -322,7 +344,9 @@ local state = {
     selected = nil,
     lastActivated = nil,
     activePage = 1,
-    visibleSlotCount = math.floor(clamp(initialVisibleSlotCount, MIN_VISIBLE_SLOTS, MAX_VISIBLE_SLOTS)),
+    activeWheelCount = math.floor(clamp(
+        tonumber(savedSettings.wheelCount or cfg("wheelCount", 3)) or 3, 1, PAGE_COUNT)),
+    visibleSlotCounts = initialVisibleSlotCounts,
     wheelSkin = validWheelSkin(savedSettings.wheelSkin or cfg("wheelSkin", "wheel_02.png")),
     assignments = makeValidatedAssignments(savedAssignments),
     pc = nil,
@@ -383,13 +407,17 @@ local state = {
     dividers = {},
 
     editorRows = {},
-    editorCountText = nil,
-    editorMinusRect = nil,
-    editorPlusRect = nil,
-    editorCountDropdownRect = nil,
+    editorCountTexts = {},
+    editorCountDropdownRects = {},
     editorCountDropdownOpen = false,
+    editorCountDropdownPage = nil,
     editorCountDropdownWidgets = {},
     editorCountOptionRects = {},
+    editorWheelCountText = nil,
+    editorWheelCountDropdownRect = nil,
+    editorWheelCountDropdownOpen = false,
+    editorWheelCountDropdownWidgets = {},
+    editorWheelCountOptionRects = {},
     editorSkinText = nil,
     editorSkinDropdownRect = nil,
     editorSkinDropdownOpen = false,
@@ -496,9 +524,12 @@ local function saveSettings()
 
     local lines = {
         "return {",
-        "    settingsFormatVersion = 1,",
+        "    settingsFormatVersion = 2,",
         "",
-        "    visibleSlotCount = " .. tostring(math.floor(state.visibleSlotCount)) .. ",",
+        "    wheel1SlotCount = " .. tostring(math.floor(state.visibleSlotCounts[1])) .. ",",
+        "    wheel2SlotCount = " .. tostring(math.floor(state.visibleSlotCounts[2])) .. ",",
+        "    wheel3SlotCount = " .. tostring(math.floor(state.visibleSlotCounts[3])) .. ",",
+        "    wheelCount = " .. tostring(math.floor(state.activeWheelCount)) .. ",",
         "    wheelSkin = " .. string.format("%q", validWheelSkin(state.wheelSkin)) .. ",",
         "    wheelOuterMarkerLayer = " .. string.format("%q", tostring(cfg("wheelOuterMarkerLayer", "front"))) .. ",",
         "    wheelFont = " .. string.format("%q", tostring(cfg("wheelFont", "Default"))) .. ",",
@@ -1146,6 +1177,43 @@ local function toggleMercyAccessory()
     return false
 end
 
+local function playEmoteIndex(index)
+    index = math.floor(tonumber(index) or -1)
+    if index < 0 or index > 8 then return false end
+
+    local pc = getPlayerController()
+    if not alive(pc) then
+        log("Emote " .. tostring(index) .. ": PlayerController unavailable", true)
+        return false
+    end
+
+    local pawn = nil
+    pcall(function() pawn = pc.Pawn end)
+    if not alive(pawn) then
+        log("Emote " .. tostring(index) .. ": player Pawn unavailable", true)
+        return false
+    end
+
+    local path = "/Game/Pal/Blueprint/Action/Palmi/Emote/BP_Action_Emote_"
+        .. tostring(index) .. ".BP_Action_Emote_" .. tostring(index) .. "_C"
+    local okClass, emoteClass = pcall(StaticFindObject, path)
+    if not okClass or not alive(emoteClass) then
+        log("Emote " .. tostring(index) .. ": action class not found", true)
+        return false
+    end
+
+    local ok, result = pcall(function()
+        return pc:ActionComponent_PlayAction_ToServer_ForPlayer(pawn, {}, emoteClass, 0)
+    end)
+    if not ok then
+        log("Emote " .. tostring(index) .. " failed: " .. tostring(result), true)
+        return false
+    end
+
+    log("Triggered emote " .. tostring(index), true)
+    return true
+end
+
 local SphereActions = require("sphere_actions")
 state.sphereActions = SphereActions.new({
     cfg = cfg,
@@ -1579,6 +1647,23 @@ local function assignmentSlotForVisibleIndex(index)
     return (state.activePage - 1) * PAGE_SIZE + index
 end
 
+local function wheelRoman(page)
+    if page == 1 then return "I" end
+    if page == 2 then return "II" end
+    return "III"
+end
+
+local function visibleSlotCountForPage(page)
+    page = math.floor(clamp(tonumber(page) or 1, 1, PAGE_COUNT))
+    local value = state.visibleSlotCounts and state.visibleSlotCounts[page] or nil
+    if type(value) ~= "number" then value = MAX_VISIBLE_SLOTS end
+    return math.floor(clamp(value, MIN_VISIBLE_SLOTS, MAX_VISIBLE_SLOTS))
+end
+
+local function activeVisibleSlotCount()
+    return visibleSlotCountForPage(state.activePage)
+end
+
 local function assignmentDefinitionByGlobalSlot(globalSlot)
     local id = state.assignments[globalSlot] or "empty"
     return FUNCTION_BY_ID[id] or FUNCTION_BY_ID.empty
@@ -1594,13 +1679,13 @@ local function colorForDefinition(def)
 end
 
 local function updateHighlight()
-    for index = 1, state.visibleSlotCount do
+    for index = 1, activeVisibleSlotCount() do
         local sector = state.sectors[index]
         if sector then
             local def = assignmentDefinitionForVisibleIndex(index)
             sector.globalSlot = assignmentSlotForVisibleIndex(index)
 
-            for page = 1, 2 do
+            for page = 1, PAGE_COUNT do
                 local layer = sector.pages and sector.pages[page] or nil
                 if layer ~= nil then
                     local globalSlot = (page - 1) * PAGE_SIZE + index
@@ -1638,7 +1723,7 @@ local function updateHighlight()
     end
     local selectedLeft = state.selected
     local selectedRight = state.selected ~= nil
-        and ((state.selected % state.visibleSlotCount) + 1) or nil
+        and ((state.selected % activeVisibleSlotCount()) + 1) or nil
     for dividerIndex, divider in ipairs(state.dividers or {}) do
         if divider.base ~= nil then setBorderColor(divider.base, COLORS.divider) end
         if divider.glow ~= nil then
@@ -1653,7 +1738,7 @@ local function updateHighlight()
         end
     end
     if alive(state.pageText) then
-        setText(state.pageText, state.activePage == 1 and "I" or "II")
+        setText(state.pageText, wheelRoman(state.activePage))
     end
     if state.callVisual ~= nil then
         local selectedDef = state.selected ~= nil
@@ -1663,17 +1748,25 @@ local function updateHighlight()
     end
 end
 
+local rebuildWheelForActivePage
+
 local function switchActivePage()
     if not state.open or state.selectionCommitted then return false end
-    state.activePage = state.activePage == 1 and 2 or 1
+    local pageCount = math.floor(clamp(state.activeWheelCount or PAGE_COUNT, 1, PAGE_COUNT))
+    state.activePage = (state.activePage % pageCount) + 1
     state.selected = nil
     state.lastActivated = nil
     state.hoverPreviewKey = nil
-    updateHighlight()
+
+    if type(rebuildWheelForActivePage) ~= "function"
+        or not rebuildWheelForActivePage() then
+        return false
+    end
+
     if state.controller == nil or not state.controller:isSession() then
         centerHardwareCursor(state.pc)
     end
-    log("Switched to Wheel " .. (state.activePage == 1 and "I" or "II"), true)
+    log("Switched to Wheel " .. wheelRoman(state.activePage), true)
     return true
 end
 
@@ -1720,13 +1813,17 @@ local function destroyWidget()
     state.dividers = {}
     state.wheelBackgroundTexture = nil
     state.editorRows = {}
-    state.editorCountText = nil
-    state.editorMinusRect = nil
-    state.editorPlusRect = nil
-    state.editorCountDropdownRect = nil
+    state.editorCountTexts = {}
+    state.editorCountDropdownRects = {}
     state.editorCountDropdownOpen = false
+    state.editorCountDropdownPage = nil
     state.editorCountDropdownWidgets = {}
     state.editorCountOptionRects = {}
+    state.editorWheelCountText = nil
+    state.editorWheelCountDropdownRect = nil
+    state.editorWheelCountDropdownOpen = false
+    state.editorWheelCountDropdownWidgets = {}
+    state.editorWheelCountOptionRects = {}
     state.editorSkinText = nil
     state.editorSkinDropdownRect = nil
     state.editorSkinDropdownOpen = false
@@ -1818,7 +1915,7 @@ local function createBaseWidget(pc)
     return true
 end
 
-local function createCanvasText(tree, root, textValue, x, y, width, height, fontSize)
+local function createCanvasText(tree, root, textValue, x, y, width, height, fontSize, justification)
     local text = construct("/Script/UMG.TextBlock", tree)
     if not alive(text) then return nil end
     local slot = addToCanvas(root, text)
@@ -1838,7 +1935,7 @@ local function createCanvasText(tree, root, textValue, x, y, width, height, font
         end)
     end
     pcall(function() text:SetAutoWrapText(false) end)
-    pcall(function() text:SetJustification(1) end)
+    pcall(function() text:SetJustification(tonumber(justification) or 1) end)
     pcall(function() text:SetVisibility(VIS_HIT_TEST_INVISIBLE) end)
     return text
 end
@@ -2069,8 +2166,7 @@ local function buildWidget(pc)
         markerLayer = "front"
     end
     local markerZOrder = markerLayer == "back" and -10 or 10
-    local visibleCount = math.floor(clamp(state.visibleSlotCount, MIN_VISIBLE_SLOTS, MAX_VISIBLE_SLOTS))
-    state.visibleSlotCount = visibleCount
+    local visibleCount = activeVisibleSlotCount()
 
     local radialSpan = outerRadius - innerRadius
     local sectorSpan = TWO_PI / visibleCount
@@ -2167,7 +2263,7 @@ local function buildWidget(pc)
         local labelWidth, labelHeight = 74, 28
         local labelX = centerX + math.cos(centerAngle) * labelRadius - labelWidth * 0.5
         local labelY = centerY - math.sin(centerAngle) * labelRadius - labelHeight * 0.5
-        for page = 1, 2 do
+        for page = 1, PAGE_COUNT do
             local globalSlot = (page - 1) * PAGE_SIZE + index
             local def = assignmentDefinitionByGlobalSlot(globalSlot)
             local layer = {}
@@ -2186,7 +2282,7 @@ local function buildWidget(pc)
     end
 
     state.pageText = createCanvasText(tree, root,
-        state.activePage == 1 and "I" or "II",
+        wheelRoman(state.activePage),
         centerX - 45, centerY - 15, 90, 30)
     if state.callVisual ~= nil and state.callVisual("build", tree, root,
         centerX, centerY, clamp(cfg("centerSize", 136), 50, 160)) then
@@ -2225,7 +2321,7 @@ local function buildWidget(pc)
 
     setVisible(state.wheelPanel, false)
     if newMaster then setVisible(state.widget, false) end
-    log("Persistent dual-page " .. validWheelSkin(state.wheelSkin) .. " "
+    log("Persistent three-page " .. validWheelSkin(state.wheelSkin) .. " "
         .. tostring(visibleCount) .. "-slot wheel built", true)
     return true
 end
@@ -2246,6 +2342,18 @@ local function invalidateWheelPanel()
     if state.callVisual ~= nil then state.callVisual("reset") end
 end
 
+rebuildWheelForActivePage = function()
+    invalidateWheelPanel()
+    if not buildWidget(state.pc) then return false end
+    setVisible(state.wheelPanel, true)
+    setVisible(state.widget, true)
+    if state.callVisual ~= nil then
+        state.callVisual("begin", state.wheelPanel, state.sectors, state.activePage)
+    end
+    updateHighlight()
+    return true
+end
+
 local function readMousePosition(pc)
     local layout = getWidgetLayoutLibrary()
     if not alive(layout) or not alive(pc) then return nil, nil end
@@ -2263,13 +2371,26 @@ local function readMousePosition(pc)
 end
 
 
-local function createEditorText(tree, root, textValue, x, y, width, height)
-    return createCanvasText(tree, root, textValue, x, y, width, height)
+local function createEditorText(tree, root, textValue, x, y, width, height, fontSize, justification)
+    return createCanvasText(tree, root, textValue, x, y, width, height, fontSize, justification)
 end
 
-local function updateEditorCountText()
-    if alive(state.editorCountText) then
-        setText(state.editorCountText, tostring(state.visibleSlotCount) .. " slots  ▼")
+local function updateEditorCountText(page)
+    if page ~= nil then
+        local widget = state.editorCountTexts and state.editorCountTexts[page] or nil
+        if alive(widget) then
+            setText(widget, tostring(visibleSlotCountForPage(page)) .. " SLOTS  ▼")
+        end
+        return
+    end
+    for wheel = 1, PAGE_COUNT do updateEditorCountText(wheel) end
+end
+
+local function updateEditorWheelCountText()
+    if alive(state.editorWheelCountText) then
+        setText(state.editorWheelCountText,
+            tostring(math.floor(clamp(state.activeWheelCount or PAGE_COUNT, 1, PAGE_COUNT)))
+                .. "  ▼")
     end
 end
 
@@ -2322,16 +2443,22 @@ local function buildEditorWidget(pc)
                 byId = FUNCTION_BY_ID,
                 colorForDefinition = colorForDefinition,
                 updateCountText = updateEditorCountText,
+                updateWheelCountText = updateEditorWheelCountText,
                 updateSkinText = updateEditorSkinText,
                 updateSlowMotionText = updateEditorSlowMotionText,
                 wheelSkins = WHEEL_SKINS,
                 updateRow = updateEditorRow,
+                pageSize = PAGE_SIZE,
+                pageCount = PAGE_COUNT,
+                totalSlots = TOTAL_ASSIGNMENT_SLOTS,
+                wheelRoman = wheelRoman,
                 hitTestInvisible = VIS_HIT_TEST_INVISIBLE,
                 log = log,
             })
         else
-            log("Incremental editor builder unavailable; using compatibility builder: "
+            log("F7 editor unavailable: editor_builder.lua could not be loaded: "
                 .. tostring(builderModule), true)
+            return false
         end
     end
     if state.editorBuilder ~= nil then
@@ -2608,7 +2735,7 @@ local function buildEditorWidget(pc)
         1570, 958, 170, 24, 12)
 
     setVisible(state.editorPanel, false)
-    log("Persistent 24-slot editor and grouped function picker built", true)
+    log("Persistent 36-slot editor and grouped function picker built", true)
     return true
 end
 
@@ -2625,25 +2752,41 @@ local function setPickerVisible(visible)
     end
 end
 
-local function setEditorDropdownVisible(kind, visible)
-    local isCount = kind == "count"
-    local widgets = isCount and state.editorCountDropdownWidgets
-        or state.editorSkinDropdownWidgets
-    if isCount then
+local function setEditorDropdownVisible(kind, visible, page)
+    if kind == "count" then
+        for wheel = 1, PAGE_COUNT do
+            for _, widget in ipairs((state.editorCountDropdownWidgets or {})[wheel] or {}) do
+                setVisible(widget, visible == true and page == wheel)
+            end
+        end
         state.editorCountDropdownOpen = visible == true
-    else
-        state.editorSkinDropdownOpen = visible == true
+        state.editorCountDropdownPage = visible == true and page or nil
+        return
     end
-    for _, widget in ipairs(widgets or {}) do setVisible(widget, visible == true) end
+
+    if kind == "wheelcount" then
+        state.editorWheelCountDropdownOpen = visible == true
+        for _, widget in ipairs(state.editorWheelCountDropdownWidgets or {}) do
+            setVisible(widget, visible == true)
+        end
+        return
+    end
+
+    state.editorSkinDropdownOpen = visible == true
+    for _, widget in ipairs(state.editorSkinDropdownWidgets or {}) do
+        setVisible(widget, visible == true)
+    end
 end
 
 local function closeEditorDropdowns()
-    setEditorDropdownVisible("count", false)
+    setEditorDropdownVisible("count", false, nil)
+    setEditorDropdownVisible("wheelcount", false)
     setEditorDropdownVisible("skin", false)
 end
 
 local function refreshEditorRows()
     updateEditorCountText()
+    updateEditorWheelCountText()
     updateEditorSkinText()
     updateEditorSlowMotionText()
     for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
@@ -2660,7 +2803,7 @@ local function openAssignmentPicker(slotIndex)
         local localSlot = ((slotIndex - 1) % PAGE_SIZE) + 1
         setText(state.editorPickerTitle,
             string.format("Choose function for Wheel %s - Slot %02d",
-                pie == 1 and "I" or "II", localSlot))
+                wheelRoman(pie), localSlot))
     end
     setPickerVisible(true)
 end
@@ -2689,12 +2832,27 @@ local function handleEditorClick(direction)
     local x, y = readMousePosition(pc)
     if x == nil or y == nil then return end
 
-    if state.editorCountDropdownOpen then
-        for value, rect in pairs(state.editorCountOptionRects or {}) do
+    if state.editorWheelCountDropdownOpen then
+        for value, rect in pairs(state.editorWheelCountOptionRects or {}) do
             if pointInRect(x, y, rect) then
-                state.visibleSlotCount = math.floor(clamp(value,
+                state.activeWheelCount = math.floor(clamp(value, 1, PAGE_COUNT))
+                if state.activePage > state.activeWheelCount then
+                    state.activePage = state.activeWheelCount
+                end
+                updateEditorWheelCountText()
+                closeEditorDropdowns()
+                saveSettings()
+                return
+            end
+        end
+        closeEditorDropdowns()
+    elseif state.editorCountDropdownOpen then
+        local page = state.editorCountDropdownPage
+        for value, rect in pairs((state.editorCountOptionRects or {})[page] or {}) do
+            if pointInRect(x, y, rect) then
+                state.visibleSlotCounts[page] = math.floor(clamp(value,
                     MIN_VISIBLE_SLOTS, MAX_VISIBLE_SLOTS))
-                updateEditorCountText()
+                updateEditorCountText(page)
                 invalidateWheelPanel()
                 closeEditorDropdowns()
                 saveSettings()
@@ -2732,13 +2890,24 @@ local function handleEditorClick(direction)
     end
 
     if direction < 0 then return end
-    if pointInRect(x, y, state.editorCountDropdownRect) then
+    if pointInRect(x, y, state.editorWheelCountDropdownRect) then
+        setEditorDropdownVisible("count", false, nil)
         setEditorDropdownVisible("skin", false)
-        setEditorDropdownVisible("count", true)
+        setEditorDropdownVisible("wheelcount", true)
         return
     end
+
+    for page = 1, PAGE_COUNT do
+        if pointInRect(x, y, (state.editorCountDropdownRects or {})[page]) then
+            setEditorDropdownVisible("wheelcount", false)
+            setEditorDropdownVisible("skin", false)
+            setEditorDropdownVisible("count", true, page)
+            return
+        end
+    end
     if pointInRect(x, y, state.editorSkinDropdownRect) then
-        setEditorDropdownVisible("count", false)
+        setEditorDropdownVisible("count", false, nil)
+        setEditorDropdownVisible("wheelcount", false)
         setEditorDropdownVisible("skin", true)
         return
     end
@@ -2750,21 +2919,6 @@ local function handleEditorClick(direction)
             .. (config.slowMotionEnabled and "ON" or "OFF"), true)
         return
     end
-    if pointInRect(x, y, state.editorMinusRect) then
-        state.visibleSlotCount = math.max(MIN_VISIBLE_SLOTS, state.visibleSlotCount - 1)
-        updateEditorCountText()
-        invalidateWheelPanel()
-        saveSettings()
-        return
-    end
-    if pointInRect(x, y, state.editorPlusRect) then
-        state.visibleSlotCount = math.min(MAX_VISIBLE_SLOTS, state.visibleSlotCount + 1)
-        updateEditorCountText()
-        invalidateWheelPanel()
-        saveSettings()
-        return
-    end
-
     for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
         local row = state.editorRows[slotIndex]
         if row ~= nil and pointInRect(x, y, row.rect) then
@@ -2858,9 +3012,9 @@ local function updateSelectionFromCursor(pc)
         local bestIndex = nil
         local bestDistance = math.huge
 
-        for index = 1, state.visibleSlotCount do
+        for index = 1, activeVisibleSlotCount() do
             local slotAngle = math.rad(tonumber(cfg("wheelSlotOneAngleDegrees", 180)) or 180)
-                - ((index - 1) * TWO_PI / state.visibleSlotCount)
+                - ((index - 1) * TWO_PI / activeVisibleSlotCount())
             local distance = angularDistance(angle, slotAngle)
             if distance < bestDistance then
                 bestDistance = distance
@@ -2968,7 +3122,7 @@ local function openWheel(pc, inputSource)
     end
     enforcePageAimSuppression()
     enforceCameraLock()
-    log("Dynamic wheel shown with " .. tostring(state.visibleSlotCount)
+    log("Dynamic wheel shown with " .. tostring(activeVisibleSlotCount())
         .. " sectors via " .. (inputSource == "controller" and "controller" or "keyboard"), true)
     return true
 end
@@ -3031,6 +3185,11 @@ local function activateSelectedOption(trigger)
         return true
     end
 
+    if def.kind == "emote" then
+        closeWheel("Emote assignment selected")
+        return playEmoteIndex(def.emoteIndex)
+    end
+
     state.selectionCommitted = false
     return false
 end
@@ -3043,6 +3202,7 @@ state.controller = require("controller").new({
     isKeyDown = isKeyDown,
     clamp = clamp,
     angularDistance = angularDistance,
+    visibleSlotCount = activeVisibleSlotCount,
     assignmentDefinitionForVisibleIndex = assignmentDefinitionForVisibleIndex,
     previewAssignmentNatively = previewAssignmentNatively,
     updateHighlight = updateHighlight,
@@ -3252,7 +3412,7 @@ log("v" .. tostring(cfg("version", "1.0"))
     .. "inward stick return or open-button release activates the selected slot; "
     .. state.keyboardPageKeyName .. " or isolated "
     .. tostring(cfg("controllerPageButton") or "")
-    .. " swaps Wheel I/II; other input is polled only while open and cancels without activation; "
+    .. " cycles Wheel I/II/III; other input is polled only while open and cancels without activation; "
     .. "controller actions stay muted until release and camera resumes after recentering; "
     .. state.settingsKeyName .. " opens the saved assignment editor; Pal, weapon, and sphere slots "
     .. "update Palworld's native HUD selection once per hover change; weapon slots 1-6 are assignable; "
