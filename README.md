@@ -2,9 +2,9 @@
 
 **PalWheel** is a customizable radial action wheel for **Palworld** built with **UE4SS**.
 
-It gives quick access to frequently used actions through **two configurable wheels**, with **24 saved assignment positions total** and **4 to 12 visible slots per wheel**. PalWheel is designed primarily for controller use, while still supporting keyboard and mouse.
+It gives quick access to frequently used actions through **up to three configurable wheels**, with **36 saved assignment positions total** and **4 to 12 visible slots per wheel**. PalWheel is designed primarily for controller use, while still supporting keyboard and mouse.
 
-> **Current version:** 1.1  
+> **Current version:** 1.2  
 > **Author:** CHUBBYALVIN  
 > **Platform:** Palworld for Windows  
 > **Framework:** UE4SS
@@ -13,9 +13,9 @@ It gives quick access to frequently used actions through **two configurable whee
 
 ## Features
 
-- Two independent radial wheel pages: **Wheel I** and **Wheel II**
-- **24 customizable assignment positions total**
-- **4–12 visible slots per wheel**
+- **1, 2, or 3 configurable radial wheels**
+- **36 customizable assignment positions total** — 12 per wheel
+- Independently configure **4–12 visible slots per wheel**
 - Controller and keyboard/mouse support
 - In-game **F7 assignment editor**
 - Automatic saving of user settings and assignments
@@ -26,6 +26,7 @@ It gives quick access to frequently used actions through **two configurable whee
 - Improved controller input handling and camera stability when slow motion is unavailable
 - Weapon, Pal and sphere hover/selection previews
 - Input and camera handling while the wheel is open
+- **Assignable vanilla Palworld emotes**
 - Separate user-generated settings and assignment files
 
 ### Assignable actions
@@ -65,6 +66,17 @@ It gives quick access to frequently used actions through **two configurable whee
 - Sol Sphere
 - Ancient Sphere
 
+#### Emotes
+- Beckon
+- Dance
+- Wave
+- Sit in Chair
+- Sit on Ground
+- Surprised
+- Hand Over
+- Sleep
+- Kick
+
 #### Utility
 - Mercy accessory toggle
 
@@ -83,7 +95,13 @@ It gives quick access to frequently used actions through **two configurable whee
 | **Right Stick** | Highlight a slot |
 | Return Right Stick inward | Activate after the configured inward-return threshold |
 | Release **L1 / LB** | Activate the highlighted slot |
-| **R1 / RB** | Switch between Wheel I and Wheel II |
+| **R1 / RB** | Switch between enabled wheels |
+
+When multiple wheels are enabled, the page button cycles through them:
+
+- 1 wheel: Wheel I
+- 2 wheels: Wheel I → Wheel II
+- 3 wheels: Wheel I → Wheel II → Wheel III
 
 ### Recommended Palworld controller remap
 
@@ -102,7 +120,7 @@ This keeps Pal summoning available on D-pad Left while freeing L1 / LB for PalWh
 | Hold **Caps Lock** | Open PalWheel |
 | Mouse movement | Highlight a slot |
 | Release **Caps Lock** | Activate the highlighted slot |
-| **Right Mouse Button** | Switch between Wheel I and Wheel II |
+| **Right Mouse Button** | Switch between enabled wheels |
 | **F7** | Open or close the assignment editor |
 
 ### Custom trigger keys
@@ -120,16 +138,12 @@ The generated `settings.lua` contains the user-facing trigger bindings, includin
 ```lua
 controllerOpenButton = "Gamepad_LeftShoulder",
 controllerPageButton = "Gamepad_RightShoulder",
-   
 
-						
-
-	  
 openKey = "CAPS_LOCK",
 keyboardPageButton = "RIGHT_MOUSE_BUTTON",
 ```
 
-Change these values in `Saved\settings.lua` if you prefer a different controller or keyboard/mouse layout. 
+Change these values in `Saved\settings.lua` if you prefer a different controller or keyboard/mouse layout.
 
 
 ---
@@ -138,15 +152,17 @@ Change these values in `Saved\settings.lua` if you prefer a different controller
 
 Press **F7** in-game to open the assignment editor.
 
-The editor lets you:
+The editor displays **Wheel I, Wheel II and Wheel III** side by side and lets you:
 
-- View Wheel I and Wheel II side by side
-- Click an assigned-function cell to choose a new action
-- Choose from grouped categories such as Weapons, Party, Game Menus, Spheres, Utility and General
-- Change the number of visible slots per wheel from **4 to 12**
+- Assign functions to all **36 saved assignment positions**
+- Choose from grouped categories including Weapons, Party, Game Menus, Spheres, Emotes, Utility and General
+- Select whether **1, 2, or 3 wheels** are active
+- Independently configure **4–12 visible slots for each wheel**
 - Select an installed wheel skin
-- Save assignments, slot count and wheel skin automatically
 - Enable or disable **Slow Motion**
+- Automatically save assignments and settings
+
+All three wheel columns remain available in the editor even when fewer than three wheels are enabled, allowing additional wheels to be configured before enabling them.
 
 > **Multiplayer:** Slow Motion is automatically disabled when PalWheel detects multiplayer, regardless of this setting.
 
@@ -159,6 +175,7 @@ The editor uses direct mouse clicks for assignment changes.
 While PalWheel is open:
 
 - Mouse direction or Right Stick direction selects a slot around the wheel.
+- The configured page button cycles between the currently enabled wheels.
 - The camera is clamped while the wheel is active.
 - Slow Motion can be enabled or disabled from the assignment editor.
 - When multiplayer is detected, PalWheel automatically disables slow motion regardless of the saved setting.
@@ -167,6 +184,7 @@ While PalWheel is open:
 - Weapon, Pal and sphere slots can preview their selection when highlighted.
 - Pal actions select the corresponding party slot and summon the Pal near the player.
 - Sphere actions check inventory and attempt to equip the selected sphere type.
+- Emote actions directly trigger the assigned vanilla Palworld emote.
 - The World Map uses a native UI call.
 - Other supported menus use deferred key input.
 - Closing the wheel restores cursor, input, camera and time state.
@@ -186,11 +204,12 @@ PalWheel only opens during normal playable world state and stays closed while bl
 ```text
 Palworld\Pal\Binaries\Win64\ue4ss\Mods\
 ```
+
 or
+
 ```text
 Palworld\Mods\NativeMods\UE4SS\Mods\
 ```
-
 
 4. Confirm the final structure includes:
 
@@ -235,11 +254,13 @@ Saved\settings.lua
 Saved\assignments.lua
 ```
 
-`settings.lua` stores user-facing preferences and controls.
+`settings.lua` stores user-facing preferences and controls, including the number of enabled wheels and the visible slot count for each wheel.
 
-`assignments.lua` stores the 24 assignment IDs used by Wheel I and Wheel II.
+`assignments.lua` stores the **36 assignment IDs** used by Wheel I, Wheel II and Wheel III.
 
 The generated files are written separately so updates to the mod do not need to overwrite user choices.
+
+Existing settings and assignments are migrated when required by newer PalWheel settings formats.
 
 ---
 
@@ -255,7 +276,7 @@ wheel_02.png
 wheel_99.png
 ```
 
-Version 1.0 includes:
+Included skins:
 
 - `wheel_01.png` — plain wheel skin
 - `wheel_02.png` — detailed default wheel skin
@@ -299,8 +320,8 @@ PalWheel\
 |---|---|
 | `main.lua` | Core state, saved data, action catalogue, UMG construction, UI guards and wheel/editor lifecycle |
 | `config.lua` | Packaged defaults for layout, appearance, timing and features |
-| `mappings.lua` | Keyboard, mouse and controller mappings and menu shortcut definitions |
-| `controller.lua` | Controller session handling, radial selection, page switching and close-on-button behavior |
+| `mappings.lua` | Default keyboard, mouse and controller mappings and menu shortcut definitions |
+| `controller.lua` | Controller session handling, radial selection, wheel switching and close-on-button behavior |
 | `input_runtime.lua` | Keyboard/mouse polling, release activation and wheel-session handling |
 | `editor_builder.lua` | F7 editor, assignment rows, grouped function picker and dropdowns |
 | `wheel_visuals.lua` | Wheel centre details, direction visuals, selection styling and reveal behavior |
@@ -324,13 +345,27 @@ PalWheel\
 [PalWheel]
 ```
 
-### Menu actions do not match remapped controls
+### Custom PalWheel trigger binding does not take effect
 
-Update the relevant shortcut mappings in:
+Personal PalWheel trigger bindings should be changed in:
+
+```text
+PalWheel\Saved\settings.lua
+```
+
+Close Palworld before editing the file.
+
+`Scripts\mappings.lua` contains the packaged defaults. Values already saved in `Saved\settings.lua` take priority over those defaults.
+
+### Menu actions do not match remapped Palworld controls
+
+Some supported menu shortcuts depend on Palworld's keyboard bindings. Update the relevant shortcut mappings in:
 
 ```text
 Scripts\mappings.lua
 ```
+
+if those Palworld controls have been remapped.
 
 ### Remapped movement keys cause the wheel to close
 
@@ -354,7 +389,7 @@ and that the skin name matches the saved setting.
 
 ## Planned / Possible Future Updates
 
-PalWheel v1.1 focuses on a stable, configurable action wheel without slot icons.
+PalWheel v1.2 expands the wheel architecture while retaining the existing controller-focused design.
 
 Ideas being explored for future versions include:
 
