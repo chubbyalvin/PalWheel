@@ -362,6 +362,7 @@ local state = {
     lookInputBlocked = false,
     moveInputBlocked = false,
     gameplayInputBlocked = false,
+    controllerWheelInputSuppressed = false,
     lockedRotation = nil,
     disabledInputActors = {},
     blockedInputComponents = {},
@@ -447,6 +448,9 @@ local state = {
     editorBuilder = nil,
     keyboardOpenWasDown = false,
     keyboardOpenHandledAt = 0.0,
+    keyboardMouseNeutralX = nil,
+    keyboardMouseNeutralY = nil,
+    keyboardMouseNeutralReady = false,
     uiPrebuildReadyAt = math.huge,
     sessionReady = false,
 
@@ -850,6 +854,26 @@ local function disableActorInput(actor, pc)
     if ok then state.disabledInputActors[#state.disabledInputActors + 1] = actor end
 end
 
+state.setControllerWheelInputSuppressed = function(enabled)
+    enabled = enabled == true
+    if state.controllerWheelInputSuppressed == enabled then return true end
+
+    local pc = state.pc
+    if not alive(pc) then pc = getPlayerController() end
+    if not alive(pc) then return false end
+
+    local ok, err = pcall(function()
+        pc:SetDisableInputFlag(FName("PalWheelPageButton"), enabled)
+    end)
+    if not ok then
+        log("Controller wheel input suppression failed: " .. tostring(err), true)
+        return false
+    end
+
+    state.controllerWheelInputSuppressed = enabled
+    return true
+end
+
 local function blockGameplayInput(pc)
     state.disabledInputActors = {}
     state.blockedInputComponents = {}
@@ -889,6 +913,10 @@ end
 
 local function restoreGameplayInput()
     local pc = state.pc
+
+    if state.controllerWheelInputSuppressed then
+        state.setControllerWheelInputSuppressed(false)
+    end
 
     if state.editorDisableFlagApplied and alive(pc) then
         pcall(function() pc:SetDisableInputFlag(FName("PalWheelEditor"), false) end)
@@ -1440,6 +1468,103 @@ local function readControlRotation(pc)
     }
 end
 
+state.controllerMovementBridge = {
+    leftXKey = nil,
+    leftYKey = nil,
+    failureLogged = false,
+}
+
+function state.controllerMovementBridge.readAxis(pc, key)
+    if not alive(pc) or key == nil then return 0.0 end
+    local ok, value = pcall(function() return pc:GetInputAnalogKeyState(key) end)
+    value = ok and tonumber(value) or 0.0
+    return clamp(value, -1.0, 1.0)
+end
+
+function state.controllerMovementBridge.player(pc)
+    local player = nil
+    if alive(pc) then pcall(function() player = pc.Pawn end) end
+    if not alive(player) then player = getLocalPlayerCharacter() end
+    return player
+end
+
+function state.controllerMovementBridge.vectorXY(vector)
+    if vector == nil then return nil, nil end
+    local x, y = nil, nil
+    pcall(function() x = tonumber(vector.X) end)
+    pcall(function() y = tonumber(vector.Y) end)
+    if x == nil or y == nil then
+        pcall(function()
+            local raw = vector:get()
+            if raw ~= nil then
+                x = tonumber(raw.X)
+                y = tonumber(raw.Y)
+            end
+        end)
+    end
+    return x, y
+end
+
+function state.controllerMovementBridge.forward()
+    if not state.open or state.controller == nil
+        or not state.controller:isSession()
+        or not state.controllerWheelInputSuppressed then
+        return
+    end
+
+    local pc = state.pc
+    if not alive(pc) then pc = getPlayerController() end
+    if not alive(pc) then return end
+
+    if state.controllerMovementBridge.leftXKey == nil then
+        state.controllerMovementBridge.leftXKey = makeFKey("Gamepad_LeftX")
+        state.controllerMovementBridge.leftYKey = makeFKey("Gamepad_LeftY")
+    end
+
+    local x = state.controllerMovementBridge.readAxis(
+        pc, state.controllerMovementBridge.leftXKey)
+    local y = state.controllerMovementBridge.readAxis(
+        pc, state.controllerMovementBridge.leftYKey)
+    local magnitude = math.sqrt(x * x + y * y)
+    if magnitude <= 0.08 then return end
+    if magnitude > 1.0 then
+        x = x / magnitude
+        y = y / magnitude
+    end
+
+    local player = state.controllerMovementBridge.player(pc)
+    if not alive(player) then return end
+
+    local forward, right = nil, nil
+    pcall(function() forward = player:GetActorForwardVector() end)
+    pcall(function() right = player:GetActorRightVector() end)
+    if forward == nil or right == nil then return end
+
+    local fx, fy = state.controllerMovementBridge.vectorXY(forward)
+    local rotation = readControlRotation(pc)
+    local controlYaw = rotation ~= nil and tonumber(rotation.Yaw) or nil
+    if fx == nil or fy == nil or controlYaw == nil then return end
+
+    local actorYaw = math.deg(math.atan(fy, fx))
+    local delta = math.rad(controlYaw - actorYaw)
+    local c = math.cos(delta)
+    local s = math.sin(delta)
+    local localForward = y * c - x * s
+    local localRight = y * s + x * c
+
+    local okForward = pcall(function()
+        player:AddMovementInput(forward, localForward, true)
+    end)
+    local okRight = pcall(function()
+        player:AddMovementInput(right, localRight, true)
+    end)
+    if (not okForward or not okRight)
+        and not state.controllerMovementBridge.failureLogged then
+        state.controllerMovementBridge.failureLogged = true
+        log("Controller movement pass-through failed", true)
+    end
+end
+
 local function beginCameraLock(pc)
     if not alive(pc) then return false end
 
@@ -1576,10 +1701,54 @@ end
 
 local function centerHardwareCursor(pc)
     if not alive(pc) then return false end
+
     local centerX = math.floor(tonumber(cfg("centerX", 960)) or 960)
     local centerY = math.floor(tonumber(cfg("centerY", 540)) or 540)
+
+    state.keyboardMouseNeutralReady = false
+    state.keyboardMouseNeutralX = nil
+    state.keyboardMouseNeutralY = nil
+
     local ok = pcall(function() pc:SetMouseLocation(centerX, centerY) end)
     if ok then log("Mouse cursor centred for radial selection", true) end
+
+    local function captureNeutral()
+        if not state.open or not alive(state.pc) then return end
+        if state.controller ~= nil and state.controller:isSession() then return end
+
+        local layout = getWidgetLayoutLibrary()
+        if not alive(layout) then return end
+
+        local okPos, pos = pcall(function()
+            return layout:GetMousePositionOnViewport(state.pc)
+        end)
+        if not okPos or pos == nil then return end
+
+        local x, y = nil, nil
+        pcall(function()
+            x = tonumber(pos.X)
+            y = tonumber(pos.Y)
+        end)
+        if x == nil or y == nil then return end
+
+        state.keyboardMouseNeutralX = x
+        state.keyboardMouseNeutralY = y
+        state.keyboardMouseNeutralReady = true
+        state.selected = nil
+        state.hoverPreviewKey = nil
+        if state.callVisual ~= nil then
+            state.callVisual("setDirection", nil, 0.0,
+                clamp(cfg("mouseDeadzone", 42), 5,
+                    clamp(cfg("mouseMaxRadius", 220), 60, 800) - 5))
+        end
+    end
+
+    if type(ExecuteWithDelay) == "function" then
+        ExecuteWithDelay(12, captureNeutral)
+    else
+        captureNeutral()
+    end
+
     return ok
 end
 
@@ -2989,8 +3158,28 @@ local function updateSelectionFromCursor(pc)
         return
     end
 
+    local isKeyboardSession = state.controller == nil
+        or not state.controller:isSession()
+
+    if isKeyboardSession and state.keyboardMouseNeutralReady ~= true then
+        state.selected = nil
+        if state.callVisual ~= nil then
+            local maxRadius = clamp(cfg("mouseMaxRadius", 220), 60, 800)
+            local deadzone = clamp(cfg("mouseDeadzone", 42), 5, maxRadius - 5)
+            state.callVisual("setDirection", nil, 0.0, deadzone)
+        end
+        return
+    end
+
     local centerX = tonumber(cfg("centerX", 960)) or 960
     local centerY = tonumber(cfg("centerY", 540)) or 540
+    if isKeyboardSession
+        and state.keyboardMouseNeutralX ~= nil
+        and state.keyboardMouseNeutralY ~= nil then
+        centerX = state.keyboardMouseNeutralX
+        centerY = state.keyboardMouseNeutralY
+    end
+
     local dx = mouseX - centerX
     local dyUp = centerY - mouseY
     local magnitude = math.sqrt(dx * dx + dyUp * dyUp)
@@ -3048,6 +3237,9 @@ local function closeWheel(reason)
     state.pendingSphereId = nil
     state.hoverPreviewKey = nil
     state.keyboardCancelWasDown = {}
+    state.keyboardMouseNeutralX = nil
+    state.keyboardMouseNeutralY = nil
+    state.keyboardMouseNeutralReady = false
     setVisible(state.wheelPanel, false)
     setVisible(state.widget, false)
     if state.callVisual ~= nil then
@@ -3092,6 +3284,9 @@ local function openWheel(pc, inputSource)
     state.mouseReadFailureLogged = false
     state.cameraLockFailureLogged = false
     state.aimSuppressionFailureLogged = false
+    state.keyboardMouseNeutralX = nil
+    state.keyboardMouseNeutralY = nil
+    state.keyboardMouseNeutralReady = false
 
     state.activePalSlot = readSelectedPartyPalSlot() or state.activePalSlot
 
@@ -3212,6 +3407,7 @@ state.controller = require("controller").new({
         end
     end,
     switchActivePage = switchActivePage,
+    setWheelInputSuppressed = state.setControllerWheelInputSuppressed,
     activateSelectedOption = activateSelectedOption,
     closeWheel = closeWheel,
     log = log,
@@ -3236,6 +3432,7 @@ state.inputRuntime = InputRuntime.new({
     handleEditorClick = handleEditorClick,
     enforcePageAimSuppression = enforcePageAimSuppression,
     switchActivePage = switchActivePage,
+    visibleSlotCount = activeVisibleSlotCount,
     updateSelectionFromCursor = updateSelectionFromCursor,
     destroyWidget = destroyWidget,
     destroyCenterNotification = destroyCenterNotification,
@@ -3360,6 +3557,8 @@ function state.fastTick()
 end
 
 function state.fastCameraTick()
+    state.controllerMovementBridge.forward()
+
     if state.open
         and state.controller:isSession()
         and state.slowMotionApplied ~= true then

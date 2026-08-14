@@ -248,8 +248,10 @@ function InputRuntime:handleOpenPressed()
         return
     end
     if (os.clock() - o.state.openedAt) >= 0.25 then
+        local visibleCount = type(o.visibleSlotCount) == "function"
+            and tonumber(o.visibleSlotCount()) or tonumber(o.cfg("visibleSlotCount", 12)) or 12
         if o.state.selected ~= nil and o.state.selected >= 1
-            and o.state.selected <= o.state.visibleSlotCount then
+            and o.state.selected <= visibleCount then
             if not o.activateSelectedOption("Open-key fallback press") then
                 o.closeWheel("Fallback open-key press closed the wheel")
             end
@@ -286,8 +288,10 @@ function InputRuntime:pollKeyboardWheel(pc)
     local grace = o.clamp(o.cfg("releaseGraceSeconds", 0.10), 0.05, 0.40)
     if o.state.openKeySawDown and not down
         and (os.clock() - o.state.openedAt) >= grace then
+        local visibleCount = type(o.visibleSlotCount) == "function"
+            and tonumber(o.visibleSlotCount()) or tonumber(o.cfg("visibleSlotCount", 12)) or 12
         if o.state.selected ~= nil and o.state.selected >= 1
-            and o.state.selected <= o.state.visibleSlotCount then
+            and o.state.selected <= visibleCount then
             if not o.activateSelectedOption("Open-key release") then
                 o.closeWheel("Open key released over an empty slot")
             end

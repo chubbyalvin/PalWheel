@@ -182,10 +182,16 @@ function Controller:begin(pc)
     self.peakStickSelection = nil
     self:prepareCancelInputs()
     self:primeCancelInputLatches(pc)
+    if type(self.o.setWheelInputSuppressed) == "function" then
+        self.o.setWheelInputSuppressed(true)
+    end
 end
 
 function Controller:finish(pc)
     local wasSession = self.session == true
+    if type(self.o.setWheelInputSuppressed) == "function" then
+        self.o.setWheelInputSuppressed(false)
+    end
     self.session = false
     self.openSawDown = false
     self.pageWasDown = false
@@ -211,6 +217,9 @@ function Controller:finish(pc)
 end
 
 function Controller:reset()
+    if type(self.o.setWheelInputSuppressed) == "function" then
+        self.o.setWheelInputSuppressed(false)
+    end
     self.session = false
     self.openSawDown = false
     self.pageWasDown = false
