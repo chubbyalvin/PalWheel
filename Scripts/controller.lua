@@ -264,6 +264,13 @@ function Controller:updateReleaseGuards(pc)
     end
 end
 
+function Controller:selectionMagnitude(pc)
+    local axisX = readAnalog(self, pc, self.axisXKey)
+    local axisY = readAnalog(self, pc, self.axisYKey)
+    if axisX == nil or axisY == nil then return nil end
+    return math.sqrt(axisX * axisX + axisY * axisY)
+end
+
 function Controller:updateSelection(pc)
     local axisX = readAnalog(self, pc, self.axisXKey)
     local axisY = readAnalog(self, pc, self.axisYKey)

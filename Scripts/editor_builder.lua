@@ -106,29 +106,36 @@ function Builder:start(pc)
             .. settingsKey .. " closes the editor.",
         180, 148, 1200, 32, 14, 0)
 
-    o.createText(state.tree, editorPanel, "WHEELS", 500, 195, 100, 30, 15)
+    -- Keep the settings row compact so the multiplayer note and shortcut reset
+    -- control can remain visible together at common 16:9 resolutions.
+    o.createText(state.tree, editorPanel, "WHEELS", 180, 195, 100, 30, 15)
     local wheelCountBorder
     wheelCountBorder, state.editorWheelCountText = self:cell(
-        600, 188, 120, 42, o.colors.button, "", 14, 15)
-    state.editorWheelCountDropdownRect = { x = 600, y = 188, w = 120, h = 42 }
+        280, 188, 120, 42, o.colors.button, "", 14, 15)
+    state.editorWheelCountDropdownRect = { x = 280, y = 188, w = 120, h = 42 }
     o.updateWheelCountText()
 
-    o.createText(state.tree, editorPanel, "WHEEL SKIN", 790, 195, 130, 30, 15)
+    o.createText(state.tree, editorPanel, "WHEEL SKIN", 445, 195, 125, 30, 15)
     local skinBorder
     skinBorder, state.editorSkinText = self:cell(
-        915, 188, 230, 42, o.colors.button, "", 14, 15)
-    state.editorSkinDropdownRect = { x = 915, y = 188, w = 230, h = 42 }
+        570, 188, 230, 42, o.colors.button, "", 14, 15)
+    state.editorSkinDropdownRect = { x = 570, y = 188, w = 230, h = 42 }
     o.updateSkinText()
 
-    o.createText(state.tree, editorPanel, "SLOW MOTION", 1210, 195, 120, 30, 15)
+    o.createText(state.tree, editorPanel, "SLOW MOTION", 835, 195, 130, 30, 15)
     local slowMotionBorder
     slowMotionBorder, state.editorSlowMotionText = self:cell(
-        1335, 188, 105, 42, o.colors.button, "", 14, 16)
-    state.editorSlowMotionRect = { x = 1335, y = 188, w = 105, h = 42 }
+        975, 188, 105, 42, o.colors.button, "", 14, 16)
+    state.editorSlowMotionRect = { x = 975, y = 188, w = 105, h = 42 }
     o.updateSlowMotionText()
     o.createText(state.tree, editorPanel,
         "Always disabled in multiplayer.",
-        1450, 195, 240, 24, 10)
+        1095, 195, 220, 24, 10)
+
+    local resetBorder, resetText = self:cell(
+        1330, 188, 240, 42, o.colors.button, "RESET SHORTCUTS", 14, 14)
+    state.editorResetShortcutsRect = { x = 1330, y = 188, w = 240, h = 42 }
+    state.editorResetShortcutsText = resetText
 
     local columnX = { 180, 700, 1220 }
     local tableW, slotW, gap = 500, 66, 4
@@ -214,17 +221,14 @@ function Builder:beginPicker()
             ids = { "weapon1", "weapon2", "weapon3", "weapon4", "weapon5", "weapon6" } },
         { title = "PARTY", x = 407, width = 155,
             ids = { "pal1", "pal2", "pal3", "pal4", "pal5" } },
-        { title = "GAME MENUS", x = 574, width = 215,
-            ids = { "character", "inventory", "map", "technology", "party", "build" } },
-        { title = "SPHERES", x = 801, width = 220,
+        { title = "SPHERES", x = 574, width = 220,
             ids = { "sphere_pal", "sphere_mega", "sphere_giga", "sphere_hyper",
                 "sphere_ultra", "sphere_legendary", "sphere_ultimate",
                 "sphere_exotic", "sphere_sol", "sphere_ancient" } },
-        { title = "EMOTES", x = 1033, width = 170,
+        { title = "EMOTES", x = 806, width = 180,
             ids = { "emote_0", "emote_1", "emote_2", "emote_3", "emote_4",
                 "emote_5", "emote_6", "emote_7", "emote_8" } },
-        { title = "UTILITY", x = 1215, width = 170, ids = { "mercy" } },
-        { title = "GENERAL", x = 1397, width = 150, ids = { "empty" } },
+        { title = "PALWHEEL", x = 998, width = 180, ids = { "map", "mercy", "empty" } },
     }
     self.groupIndex, self.groupRow = 1, 0
 end
@@ -285,6 +289,61 @@ end
 
 function Builder:finish()
     local o, state = self.o, self.o.state
+    state.editorShortcutWidgets = {}
+    state.editorShortcutRects = {}
+    state.editorShortcutRowIds = {}
+    local shortcutX, shortcutW = 1190, 490
+    local shortcutHeaderBorder, shortcutHeaderText = self:cell(
+        shortcutX, 276, shortcutW, 36, o.colors.button, "CUSTOM SHORTCUTS", 12, 14)
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = shortcutHeaderBorder
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = shortcutHeaderText
+    o.setVisible(shortcutHeaderBorder, false)
+    o.setVisible(shortcutHeaderText, false)
+    for row = 1, 10 do
+        local y = 326 + (row - 1) * 48
+        local border, label = self:cell(shortcutX, y, shortcutW, 42, o.colors.menu, "", 10, 13)
+        state.editorShortcutWidgets[row] = { border = border, text = label }
+        state.editorShortcutRects[row] = { x = shortcutX, y = y, w = shortcutW, h = 42 }
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = border
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = label
+        o.setVisible(border, false)
+        o.setVisible(label, false)
+    end
+    local prevBorder, prevText = self:cell(shortcutX, 810, 105, 34, o.colors.button, "< PREV", 12, 12)
+    local nextBorder, nextText = self:cell(shortcutX + shortcutW - 105, 810, 105, 34, o.colors.button, "NEXT >", 12, 12)
+    state.editorShortcutPrevRect = { x = shortcutX, y = 810, w = 105, h = 34 }
+    state.editorShortcutNextRect = { x = shortcutX + shortcutW - 105, y = 810, w = 105, h = 34 }
+    state.editorShortcutPrevWidgets = { prevBorder, prevText }
+    state.editorShortcutNextWidgets = { nextBorder, nextText }
+    state.editorShortcutPageText = o.createText(state.tree, self.root, "Page 1 / 1",
+        shortcutX + 120, 815, shortcutW - 240, 24, 12)
+    for _, widget in ipairs({ prevBorder, prevText, nextBorder, nextText, state.editorShortcutPageText }) do
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = widget
+        o.setVisible(widget, false)
+    end
+
+    local confirmPanel = o.construct("/Script/UMG.Border", state.tree)
+    local confirmSlot = confirmPanel and o.addToCanvas(self.root, confirmPanel) or nil
+    if confirmSlot ~= nil then
+        o.place(confirmSlot, 625, 365, 670, 260)
+        o.setBorderColor(confirmPanel, o.colors.panel)
+    end
+    local confirmOutline = self:outline(625, 365, 670, 260, 2)
+    local confirmTitle = o.createText(state.tree, self.root, "RESET CUSTOM SHORTCUTS?",
+        665, 395, 590, 36, 18)
+    local confirmBody = o.createText(state.tree, self.root,
+        "Restore Character, Inventory, Party, Technology, and Build to their default shortcuts?\nCustom shortcut definitions will be removed. Affected wheel slots become Unassigned.",
+        665, 445, 590, 72, 13)
+    local yesBorder, yesText = self:cell(760, 545, 180, 44, o.colors.button, "RESET", 50, 14)
+    local noBorder, noText = self:cell(980, 545, 180, 44, o.colors.row, "CANCEL", 48, 14)
+    state.editorResetConfirmWidgets = { confirmPanel, confirmTitle, confirmBody, yesBorder, yesText, noBorder, noText }
+    for _, widget in ipairs(confirmOutline) do
+        state.editorResetConfirmWidgets[#state.editorResetConfirmWidgets + 1] = widget
+    end
+    state.editorResetConfirmYesRect = { x = 760, y = 545, w = 180, h = 44 }
+    state.editorResetConfirmNoRect = { x = 980, y = 545, w = 180, h = 44 }
+    for _, widget in ipairs(state.editorResetConfirmWidgets) do o.setVisible(widget, false) end
+
     local help = o.createText(state.tree, self.root,
         "Right-click or click outside the panel to cancel",
         710, 832, 500, 28, 12)
@@ -306,7 +365,7 @@ function Builder:finish()
             .. "    |    Toggle Page: " .. pageKeyboard .. " / " .. pageController,
         180, 927, 1200, 24, 12, 0)
     o.createText(state.tree, self.root,
-        "Assignments, per-wheel slot counts, and wheel skin save automatically.",
+        "Assignments save automatically. Edit Saved\\shortcuts.tsv to add or disable shortcut actions.",
         180, 951, 1000, 22, 11, 0)
 	o.createText(state.tree, self.root,
 		"PalWheel v" .. tostring(o.cfg("version", "1.0")),
@@ -338,11 +397,11 @@ function Builder:finish()
     state.editorWheelCountOptionRects = {}
     for value = 1, 3 do
         local y = 232 + (value - 1) * 42
-        local border, label = self:cell(600, y, 120, 40, o.colors.row,
+        local border, label = self:cell(360, y, 120, 40, o.colors.row,
             tostring(value) .. (value == 1 and " wheel" or " wheels"), 12, 13)
         state.editorWheelCountDropdownWidgets[#state.editorWheelCountDropdownWidgets + 1] = border
         state.editorWheelCountDropdownWidgets[#state.editorWheelCountDropdownWidgets + 1] = label
-        state.editorWheelCountOptionRects[value] = { x = 600, y = y, w = 120, h = 40 }
+        state.editorWheelCountOptionRects[value] = { x = 360, y = y, w = 120, h = 40 }
         o.setVisible(border, false)
         o.setVisible(label, false)
     end
@@ -352,11 +411,11 @@ function Builder:finish()
     local skins = self.o.wheelSkins or { "wheel_01.png", "wheel_02.png" }
     for index, filename in ipairs(skins) do
         local y = 232 + (index - 1) * 42
-        local border, label = self:cell(915, y, 230, 40, o.colors.row,
+        local border, label = self:cell(650, y, 230, 40, o.colors.row,
             filename, 14, 13)
         state.editorSkinDropdownWidgets[#state.editorSkinDropdownWidgets + 1] = border
         state.editorSkinDropdownWidgets[#state.editorSkinDropdownWidgets + 1] = label
-        state.editorSkinOptionRects[filename] = { x = 915, y = y, w = 230, h = 40 }
+        state.editorSkinOptionRects[filename] = { x = 650, y = y, w = 230, h = 40 }
         o.setVisible(border, false)
         o.setVisible(label, false)
     end

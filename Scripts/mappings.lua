@@ -6,7 +6,6 @@ local Mappings = {
     mouseActivateButton = "LEFT_MOUSE_BUTTON",
     aimMouseButton = "RIGHT_MOUSE_BUTTON",
 
-    keyboardToggleStateKey = "CAPS_LOCK",
 
     keyboardMovementKeys = { "W", "A", "S", "D" },
 
@@ -62,13 +61,6 @@ local Mappings = {
         "Gamepad_RightStick_Left", "Gamepad_RightStick_Right",
     },
 
-    menuShortcutKeys = {
-        character = "TAB",
-        inventory = "I",
-        technology = "T",
-        party = "P",
-        build = "B",
-    },
 }
 
 local FRIENDLY_NAMES = {

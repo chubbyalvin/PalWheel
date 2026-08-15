@@ -36,6 +36,16 @@ local function looksLikePalWheelScripts(dir)
 end
 
 local function resolveScriptDirectory()
+    if type(package) == "table" and type(package.searchpath) == "function"
+        and type(package.path) == "string" then
+        local ok, found = pcall(package.searchpath, "config", package.path)
+        if ok and type(found) == "string" and found ~= "" then
+            found = found:gsub("\\", "/")
+            local dir = found:match("^(.+)/[^/]+$")
+            if looksLikePalWheelScripts(dir) then return dir end
+        end
+    end
+
     if debug ~= nil and type(debug.getinfo) == "function" then
         local ok, info = pcall(debug.getinfo, 1, "S")
         if ok and type(info) == "table" and type(info.source) == "string" then
@@ -72,6 +82,7 @@ local MOD_DIRECTORY = SCRIPT_DIRECTORY:gsub("[/\\]Scripts$", "")
 
 local SETTINGS_PATH = MOD_DIRECTORY .. "\\Saved\\settings.lua"
 local ASSIGNMENTS_PATH = MOD_DIRECTORY .. "\\Saved\\assignments.lua"
+local SHORTCUTS_PATH = MOD_DIRECTORY .. "\\Saved\\shortcuts.tsv"
 
 
 
@@ -104,22 +115,15 @@ end
 
 local savedSettings = loadSavedSettings()
 local settingsNeedsMigration = settingsFileLoaded
-    and (tonumber(savedSettings.settingsFormatVersion or savedSettings.version) or 0) ~= 2
+    and (tonumber(savedSettings.settingsFormatVersion or savedSettings.version) or 0) ~= 3
 
-local SAVED_CONFIG_FIELDS = {
-    "openKey", "keyboardPageButton", "settingsKey",
-    "controllerOpenButton", "controllerPageButton",
-    "wheelOuterMarkerLayer", "controllerInvertY", "controllerStickDeadzone",
-    "slowMotionEnabled", "wheelTimeDilation", "wheelFont", "mouseDeadzone",
-    "keyboardMovementKeys", "controllerMovementKeys", "menuShortcutKeys",
-}
-for _, field in ipairs(SAVED_CONFIG_FIELDS) do
-    if savedSettings[field] ~= nil then config[field] = savedSettings[field] end
-end
-if savedSettings.menuShortcutKeys == nil then
+local legacyShortcutKeys = nil
+if type(savedSettings.menuShortcutKeys) == "table" then
+    legacyShortcutKeys = savedSettings.menuShortcutKeys
+else
     local oldKeys = savedSettings.menuFallbackKeys or savedSettings.menuInjectionKeys
     if type(oldKeys) == "table" then
-        config.menuShortcutKeys = {
+        legacyShortcutKeys = {
             character = "TAB",
             inventory = oldKeys.inventory or "I",
             technology = oldKeys.technology or "T",
@@ -128,12 +132,17 @@ if savedSettings.menuShortcutKeys == nil then
         }
     end
 end
-if type(config.menuShortcutKeys) ~= "table" then config.menuShortcutKeys = {} end
-if config.menuShortcutKeys.build == nil then
-    config.menuShortcutKeys.build = "B"
-    if settingsFileLoaded then settingsNeedsMigration = true end
-end
 
+local SAVED_CONFIG_FIELDS = {
+    "openKey", "keyboardPageButton", "settingsKey",
+    "controllerOpenButton", "controllerPageButton",
+    "wheelOuterMarkerLayer", "controllerInvertY", "controllerStickDeadzone",
+    "slowMotionEnabled", "wheelTimeDilation", "wheelFont", "mouseDeadzone",
+    "keyboardMovementKeys", "controllerMovementKeys",
+}
+for _, field in ipairs(SAVED_CONFIG_FIELDS) do
+    if savedSettings[field] ~= nil then config[field] = savedSettings[field] end
+end
 local MOD = "[PalWheel] "
 local VIS_SHOW = 0
 local VIS_HIDE = 1
@@ -198,6 +207,8 @@ local COLORS = {
         A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
     menu = { R = 0.42, G = 0.18, B = 0.68,
         A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
+    shortcut = { R = 0.42, G = 0.18, B = 0.68,
+        A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
     utility = { R = 0.78, G = 0.34, B = 0.08,
         A = clamp(cfg("wheelBorderOpacity", 0.55), 0.05, 1.0) },
     emote = { R = 0.58, G = 0.38, B = 0.72,
@@ -222,7 +233,7 @@ local COLORS = {
     blocker = { R = 0.0, G = 0.0, B = 0.0, A = 0.001 },
 }
 
-local FUNCTION_CATALOG = {
+local BASE_FUNCTION_CATALOG = {
     { id = "empty", label = "Empty", short = "--", kind = "empty" },
     { id = "weapon1", label = "Weapon 1", short = "W1", kind = "weapon", index = 0 },
     { id = "weapon2", label = "Weapon 2", short = "W2", kind = "weapon", index = 1 },
@@ -236,12 +247,7 @@ local FUNCTION_CATALOG = {
     { id = "pal4", label = "Pal 4", short = "P4", kind = "pal", index = 3 },
     { id = "pal5", label = "Pal 5", short = "P5", kind = "pal", index = 4 },
     { id = "mercy", label = "Mercy Toggle", short = "MERCY", kind = "utility" },
-    { id = "character", label = "Character Menu", short = "CHAR", kind = "menu" },
-    { id = "technology", label = "Technology Menu", short = "TECH", kind = "menu" },
-    { id = "party", label = "Pal Stats / Party", short = "PARTY", kind = "menu" },
-    { id = "build", label = "Build Menu", short = "BUILD", kind = "menu" },
     { id = "map", label = "World Map", short = "MAP", kind = "menu" },
-    { id = "inventory", label = "Inventory / Character", short = "INV", kind = "menu" },
     { id = "sphere_pal", label = "Pal Sphere", short = "PAL\nCR07", kind = "sphere", sphereId = "PalSphere", sphereName = "Pal Sphere", sphereShort = "Pal", captureRate = "07" },
     { id = "sphere_mega", label = "Mega Sphere", short = "MEGA\nCR14", kind = "sphere", sphereId = "PalSphere_Mega", sphereName = "Mega Sphere", sphereShort = "Mega", captureRate = "14" },
     { id = "sphere_giga", label = "Giga Sphere", short = "GIGA\nCR20", kind = "sphere", sphereId = "PalSphere_Giga", sphereName = "Giga Sphere", sphereShort = "Giga", captureRate = "20" },
@@ -263,11 +269,43 @@ local FUNCTION_CATALOG = {
     { id = "emote_8", label = "Kick", short = "KICK", kind = "emote", emoteIndex = 8 },
 }
 
+local FUNCTION_CATALOG = {}
 local FUNCTION_BY_ID = {}
-for i, def in ipairs(FUNCTION_CATALOG) do
-    def.catalogIndex = i
-    FUNCTION_BY_ID[def.id] = def
+local ACTIVE_SHORTCUTS = {}
+local SHORTCUT_RESERVED_IDS = {}
+for _, def in ipairs(BASE_FUNCTION_CATALOG) do SHORTCUT_RESERVED_IDS[def.id] = true end
+
+local okShortcuts, ShortcutActions = pcall(require, "shortcut_actions")
+local shortcutData = nil
+if okShortcuts and type(ShortcutActions) == "table"
+    and type(ShortcutActions.load) == "function" then
+    shortcutData = ShortcutActions.load(SHORTCUTS_PATH, {
+        legacyKeys = legacyShortcutKeys,
+        reservedIds = SHORTCUT_RESERVED_IDS,
+    })
+else
+    shortcutData = { definitions = {}, active = {}, notes = {
+        "shortcut_actions.lua failed to load: " .. tostring(ShortcutActions)
+    } }
 end
+
+local function rebuildFunctionCatalog(data)
+    for key in pairs(FUNCTION_BY_ID) do FUNCTION_BY_ID[key] = nil end
+    for index = #FUNCTION_CATALOG, 1, -1 do FUNCTION_CATALOG[index] = nil end
+    for _, base in ipairs(BASE_FUNCTION_CATALOG) do
+        FUNCTION_CATALOG[#FUNCTION_CATALOG + 1] = base
+    end
+    for _, def in ipairs((data and data.definitions) or {}) do
+        FUNCTION_CATALOG[#FUNCTION_CATALOG + 1] = def
+    end
+    for i, def in ipairs(FUNCTION_CATALOG) do
+        def.catalogIndex = i
+        FUNCTION_BY_ID[def.id] = def
+    end
+    ACTIVE_SHORTCUTS = (data and data.active) or {}
+end
+
+rebuildFunctionCatalog(shortcutData)
 
 local DEFAULT_ASSIGNMENTS = {
     "mercy", "pal1", "pal2", "pal3",
@@ -296,12 +334,13 @@ local function makeValidatedAssignments(saved)
         if type(id) == "string" and FUNCTION_BY_ID[id] ~= nil then
             values[i] = id
         elseif id ~= nil then
+            values[i] = "empty"
             invalid = invalid + 1
         end
     end
     if invalid > 0 then
         settingsLoadNote = "Saved settings loaded with " .. tostring(invalid)
-            .. " invalid assignment(s) replaced by defaults"
+            .. " invalid assignment(s) replaced by Empty"
     end
     return values
 end
@@ -390,7 +429,6 @@ local state = {
     sphereSelectionQueue = nil,
     hoverPreviewKey = nil,
     activePalSlot = nil,
-    keyboardToggleRestorePending = false,
     ignoreOpenBindUntil = 0.0,
     keyboardCancelInputs = {},
     keyboardCancelWasDown = {},
@@ -432,6 +470,21 @@ local state = {
     editorPickerTitle = nil,
     editorPickerWidgets = {},
     editorPickerRects = {},
+    editorShortcutWidgets = {},
+    editorShortcutRects = {},
+    editorShortcutRowIds = {},
+    editorShortcutPage = 1,
+    editorShortcutPageText = nil,
+    editorShortcutPrevRect = nil,
+    editorShortcutNextRect = nil,
+    editorShortcutPrevWidgets = {},
+    editorShortcutNextWidgets = {},
+    editorResetShortcutsRect = nil,
+    editorResetShortcutsText = nil,
+    editorResetConfirmOpen = false,
+    editorResetConfirmWidgets = {},
+    editorResetConfirmYesRect = nil,
+    editorResetConfirmNoRect = nil,
     editorMoveBlocked = false,
     editorPawnDisabled = nil,
     editorDisableFlagApplied = false,
@@ -451,6 +504,7 @@ local state = {
     keyboardMouseNeutralX = nil,
     keyboardMouseNeutralY = nil,
     keyboardMouseNeutralReady = false,
+    hybridControllerSelectionActive = false,
     uiPrebuildReadyAt = math.huge,
     sessionReady = false,
 
@@ -459,11 +513,7 @@ local state = {
     cachedFishing = nil,
     cachedPlayer = nil,
     cachedPartyHolder = nil,
-    keyInjectDll = SCRIPT_DIRECTORY .. "\\keyinject.dll",
-    keyInjectFunctions = {},
-    keyInjectLoadErrors = {},
-    keyboardToggleRestoreFunction = nil,
-    keyboardToggleRestoreLoadAttempted = false,
+    keyInjectDll = SCRIPT_DIRECTORY .. "\\PalworldKeyInjector.dll",
     wheelBackgroundTexture = nil,
     liveMovementKeys = {},
     liveMappingDiagnosticsLogged = {},
@@ -475,6 +525,9 @@ local function log(message, force)
     end
 end
 
+for _, note in ipairs((shortcutData and shortcutData.notes) or {}) do
+    log(note, true)
+end
 
 local function writeAtomicLua(path, lines, description)
     if io == nil or type(io.open) ~= "function" then
@@ -515,7 +568,7 @@ local function saveAssignments()
     for i = 1, TOTAL_ASSIGNMENT_SLOTS do
         local id = state.assignments[i]
         if type(id) ~= "string" or FUNCTION_BY_ID[id] == nil then
-            id = DEFAULT_ASSIGNMENTS[i] or "empty"
+            id = "empty"
         end
         lines[#lines + 1] = string.format("    [%d] = %q,", i, id)
     end
@@ -528,7 +581,7 @@ local function saveSettings()
 
     local lines = {
         "return {",
-        "    settingsFormatVersion = 2,",
+        "    settingsFormatVersion = 3,",
         "",
         "    wheel1SlotCount = " .. tostring(math.floor(state.visibleSlotCounts[1])) .. ",",
         "    wheel2SlotCount = " .. tostring(math.floor(state.visibleSlotCounts[2])) .. ",",
@@ -560,14 +613,6 @@ local function saveSettings()
     lines[#lines + 1] = "    controllerMovementKeys = {"
     for _, name in ipairs(cfg("controllerMovementKeys", {}) or {}) do
         lines[#lines + 1] = "        " .. string.format("%q", tostring(name or "")) .. ","
-    end
-    lines[#lines + 1] = "    },"
-    lines[#lines + 1] = ""
-    lines[#lines + 1] = "    menuShortcutKeys = {"
-    local menuKeys = cfg("menuShortcutKeys", {})
-    for _, id in ipairs({ "character", "inventory", "technology", "party", "build" }) do
-        lines[#lines + 1] = "        " .. id .. " = "
-            .. string.format("%q", tostring(menuKeys[id] or "")) .. ","
     end
     lines[#lines + 1] = "    },"
     lines[#lines + 1] = "}"
@@ -1272,13 +1317,11 @@ state.menuActions = MenuActions.new({
     getPlayerController = getPlayerController,
     valueString = valueString,
     normalizedName = normalizedName,
+    definitionById = function(id) return FUNCTION_BY_ID[id] end,
     log = log,
 })
 local function refreshMovementKeysAllowedWhileOpen(pc)
     state.menuActions:refreshMovementKeys(pc)
-end
-local function queueKeyboardToggleRestore()
-    return state.menuActions:queueToggleRestore()
 end
 local function scheduleAssignedMenu(menuId)
     state.menuActions:schedule(menuId)
@@ -1940,14 +1983,12 @@ local function switchActivePage()
 end
 
 local function destroyWidget()
-    local restoreToggleOnDestroy = state.open and state.keyboardToggleRestorePending
     if state.controller ~= nil then state.controller:reset() end
     if state.inputRuntime ~= nil then state.inputRuntime:resetSuppression() end
     releaseCameraLock()
     restoreGameplayInput()
     if state.open or state.editorOpen then restoreGameInput() end
     restoreTimeDilation()
-    if restoreToggleOnDestroy then queueKeyboardToggleRestore() end
 
     if alive(state.widget) then
         pcall(function() state.widget:RemoveFromParent() end)
@@ -2006,6 +2047,21 @@ local function destroyWidget()
     state.editorPickerTitle = nil
     state.editorPickerWidgets = {}
     state.editorPickerRects = {}
+    state.editorShortcutWidgets = {}
+    state.editorShortcutRects = {}
+    state.editorShortcutRowIds = {}
+    state.editorShortcutPage = 1
+    state.editorShortcutPageText = nil
+    state.editorShortcutPrevRect = nil
+    state.editorShortcutNextRect = nil
+    state.editorShortcutPrevWidgets = {}
+    state.editorShortcutNextWidgets = {}
+    state.editorResetShortcutsRect = nil
+    state.editorResetShortcutsText = nil
+    state.editorResetConfirmOpen = false
+    state.editorResetConfirmWidgets = {}
+    state.editorResetConfirmYesRect = nil
+    state.editorResetConfirmNoRect = nil
     state.pageText = nil
     if state.callVisual ~= nil then state.callVisual("reset") end
     state.editorBuilder = nil
@@ -2581,7 +2637,13 @@ local function updateEditorRow(slotIndex)
     if row == nil then return end
     local def = assignmentDefinitionByGlobalSlot(slotIndex)
     if alive(row.assignmentText) then
-        setText(row.assignmentText, def.label)
+        local rowLabel = def.label
+        if def.kind == "shortcut" and tostring(def.shortcutDisplay or "") ~= "" then
+            local status = def.active == false and "  [INACTIVE]" or ""
+            rowLabel = tostring(def.label) .. status
+                .. "  [" .. tostring(def.shortcutDisplay) .. "]"
+        end
+        setText(row.assignmentText, rowLabel)
     end
     if alive(row.assignmentBorder) then
         setBorderColor(row.assignmentBorder, colorForDefinition(def))
@@ -2610,6 +2672,7 @@ local function buildEditorWidget(pc)
                 createText = createCanvasText,
                 colors = COLORS,
                 byId = FUNCTION_BY_ID,
+                activeShortcuts = function() return ACTIVE_SHORTCUTS end,
                 colorForDefinition = colorForDefinition,
                 updateCountText = updateEditorCountText,
                 updateWheelCountText = updateEditorWheelCountText,
@@ -2914,9 +2977,53 @@ local function pointInRect(x, y, rect)
         and y >= rect.y and y <= rect.y + rect.h
 end
 
+local SHORTCUT_PICKER_PAGE_SIZE = 10
+
+local function shortcutPickerPageCount()
+    return math.max(1, math.ceil(#(ACTIVE_SHORTCUTS or {}) / SHORTCUT_PICKER_PAGE_SIZE))
+end
+
+local function updateShortcutPickerPage()
+    local pageCount = shortcutPickerPageCount()
+    state.editorShortcutPage = math.floor(clamp(state.editorShortcutPage or 1, 1, pageCount))
+    local startIndex = (state.editorShortcutPage - 1) * SHORTCUT_PICKER_PAGE_SIZE + 1
+    state.editorShortcutRowIds = {}
+    for row = 1, SHORTCUT_PICKER_PAGE_SIZE do
+        local widgets = (state.editorShortcutWidgets or {})[row]
+        local def = (ACTIVE_SHORTCUTS or {})[startIndex + row - 1]
+        local rowVisible = state.editorPickerOpen == true and def ~= nil
+        if type(widgets) == "table" then
+            setVisible(widgets.border, rowVisible)
+            setVisible(widgets.text, rowVisible)
+            if def ~= nil then
+                setBorderColor(widgets.border, colorForDefinition(def))
+                setText(widgets.text, tostring(def.label) .. "    ["
+                    .. tostring(def.shortcutDisplay or def.shortcutSpec or "") .. "]")
+            end
+        end
+        state.editorShortcutRowIds[row] = def and def.id or nil
+    end
+    if alive(state.editorShortcutPageText) then
+        setText(state.editorShortcutPageText, "Page " .. tostring(state.editorShortcutPage)
+            .. " / " .. tostring(pageCount))
+        setVisible(state.editorShortcutPageText, state.editorPickerOpen == true)
+    end
+    local showPaging = state.editorPickerOpen == true and pageCount > 1
+    for _, widget in ipairs(state.editorShortcutPrevWidgets or {}) do setVisible(widget, showPaging) end
+    for _, widget in ipairs(state.editorShortcutNextWidgets or {}) do setVisible(widget, showPaging) end
+end
+
 local function setPickerVisible(visible)
     state.editorPickerOpen = visible == true
     for _, widget in ipairs(state.editorPickerWidgets or {}) do
+        setVisible(widget, visible == true)
+    end
+    updateShortcutPickerPage()
+end
+
+local function setResetConfirmVisible(visible)
+    state.editorResetConfirmOpen = visible == true
+    for _, widget in ipairs(state.editorResetConfirmWidgets or {}) do
         setVisible(widget, visible == true)
     end
 end
@@ -2966,7 +3073,9 @@ end
 
 local function openAssignmentPicker(slotIndex)
     closeEditorDropdowns()
+    setResetConfirmVisible(false)
     state.editorPickingSlot = slotIndex
+    state.editorShortcutPage = math.floor(clamp(state.editorShortcutPage or 1, 1, shortcutPickerPageCount()))
     if alive(state.editorPickerTitle) then
         local pie = math.floor((slotIndex - 1) / PAGE_SIZE) + 1
         local localSlot = ((slotIndex - 1) % PAGE_SIZE) + 1
@@ -2995,11 +3104,70 @@ local function assignPickerChoice(catalogIndex)
     return true
 end
 
+local function assignPickerChoiceById(id)
+    local def = FUNCTION_BY_ID[id]
+    local slotIndex = state.editorPickingSlot
+    if slotIndex == nil or type(def) ~= "table" then return false end
+    state.assignments[slotIndex] = def.id
+    updateEditorRow(slotIndex)
+    if alive(state.wheelPanel) then updateHighlight() end
+    saveSettings()
+    log("Editor assigned slot " .. tostring(slotIndex) .. " = " .. tostring(def.label), true)
+    closeAssignmentPicker()
+    return true
+end
+
+local function resetShortcutsToDefaults()
+    if type(ShortcutActions) ~= "table" or type(ShortcutActions.reset) ~= "function" then
+        log("Reset shortcuts failed: shortcut_actions.lua is unavailable", true)
+        return false
+    end
+    local reloaded, resetError = ShortcutActions.reset(SHORTCUTS_PATH, {
+        reservedIds = SHORTCUT_RESERVED_IDS,
+    })
+    if reloaded == nil then
+        log("Reset shortcuts failed: " .. tostring(resetError), true)
+        return false
+    end
+    shortcutData = reloaded
+    rebuildFunctionCatalog(shortcutData)
+    local removed = 0
+    for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
+        local id = state.assignments[slotIndex]
+        if type(id) ~= "string" or FUNCTION_BY_ID[id] == nil then
+            state.assignments[slotIndex] = "empty"
+            removed = removed + 1
+        end
+    end
+    state.editorShortcutPage = 1
+    closeAssignmentPicker()
+    setResetConfirmVisible(false)
+    refreshEditorRows()
+    invalidateWheelPanel()
+    updateShortcutPickerPage()
+    saveSettings()
+    log("Custom shortcuts reset to defaults"
+        .. (removed > 0 and ("; " .. tostring(removed) .. " removed slot assignment(s) became Empty") or ""), true)
+    return true
+end
+
 local function handleEditorClick(direction)
     if not state.editorOpen then return end
     local pc = state.pc
     local x, y = readMousePosition(pc)
     if x == nil or y == nil then return end
+
+    if state.editorResetConfirmOpen then
+        if direction < 0 or pointInRect(x, y, state.editorResetConfirmNoRect) then
+            setResetConfirmVisible(false)
+            return
+        end
+        if pointInRect(x, y, state.editorResetConfirmYesRect) then
+            resetShortcutsToDefaults()
+            return
+        end
+        return
+    end
 
     if state.editorWheelCountDropdownOpen then
         for value, rect in pairs(state.editorWheelCountOptionRects or {}) do
@@ -3048,6 +3216,26 @@ local function handleEditorClick(direction)
             closeAssignmentPicker()
             return
         end
+        local pageCount = shortcutPickerPageCount()
+        if pageCount > 1 and pointInRect(x, y, state.editorShortcutPrevRect) then
+            state.editorShortcutPage = state.editorShortcutPage - 1
+            if state.editorShortcutPage < 1 then state.editorShortcutPage = pageCount end
+            updateShortcutPickerPage()
+            return
+        end
+        if pageCount > 1 and pointInRect(x, y, state.editorShortcutNextRect) then
+            state.editorShortcutPage = state.editorShortcutPage + 1
+            if state.editorShortcutPage > pageCount then state.editorShortcutPage = 1 end
+            updateShortcutPickerPage()
+            return
+        end
+        for row, rect in ipairs(state.editorShortcutRects or {}) do
+            local id = state.editorShortcutRowIds and state.editorShortcutRowIds[row] or nil
+            if id ~= nil and pointInRect(x, y, rect) then
+                assignPickerChoiceById(id)
+                return
+            end
+        end
         for catalogIndex, rect in ipairs(state.editorPickerRects or {}) do
             if pointInRect(x, y, rect) then
                 assignPickerChoice(catalogIndex)
@@ -3080,6 +3268,12 @@ local function handleEditorClick(direction)
         setEditorDropdownVisible("skin", true)
         return
     end
+    if pointInRect(x, y, state.editorResetShortcutsRect) then
+        closeEditorDropdowns()
+        closeAssignmentPicker()
+        setResetConfirmVisible(true)
+        return
+    end
     if pointInRect(x, y, state.editorSlowMotionRect) then
         config.slowMotionEnabled = cfg("slowMotionEnabled", true) ~= true
         updateEditorSlowMotionText()
@@ -3103,6 +3297,7 @@ local function closeEditor(reason)
     state.editorPickingSlot = nil
     closeEditorDropdowns()
     setPickerVisible(false)
+    setResetConfirmVisible(false)
     setVisible(state.editorPanel, false)
     setVisible(state.widget, false)
     releaseCameraLock()
@@ -3148,7 +3343,7 @@ local function toggleEditor()
     end
 end
 
-local function updateSelectionFromCursor(pc)
+local function updateSelectionFromCursor(pc, preserveSelectionInDeadzone)
     local mouseX, mouseY = readMousePosition(pc)
     if mouseX == nil or mouseY == nil then
         if not state.mouseReadFailureLogged then
@@ -3189,6 +3384,9 @@ local function updateSelectionFromCursor(pc)
     local deadzone = clamp(cfg("mouseDeadzone", 42), 5, maxRadius - 5)
 
     if magnitude < deadzone then
+        if preserveSelectionInDeadzone == true then
+            return magnitude
+        end
         state.selected = nil
         if state.callVisual ~= nil then
             state.callVisual("setDirection", nil, magnitude, deadzone)
@@ -3220,6 +3418,7 @@ local function updateSelectionFromCursor(pc)
         previewAssignmentNatively(def, "mouse hover")
         updateHighlight()
     end
+    return magnitude
 end
 
 local function closeWheel(reason)
@@ -3240,6 +3439,7 @@ local function closeWheel(reason)
     state.keyboardMouseNeutralX = nil
     state.keyboardMouseNeutralY = nil
     state.keyboardMouseNeutralReady = false
+    state.hybridControllerSelectionActive = false
     setVisible(state.wheelPanel, false)
     setVisible(state.widget, false)
     if state.callVisual ~= nil then
@@ -3249,7 +3449,6 @@ local function closeWheel(reason)
     restoreGameInput()
     restoreGameplayInput()
     restoreTimeDilation()
-    queueKeyboardToggleRestore()
     log(reason or "Wheel hidden", true)
 end
 
@@ -3287,6 +3486,7 @@ local function openWheel(pc, inputSource)
     state.keyboardMouseNeutralX = nil
     state.keyboardMouseNeutralY = nil
     state.keyboardMouseNeutralReady = false
+    state.hybridControllerSelectionActive = false
 
     state.activePalSlot = readSelectedPartyPalSlot() or state.activePalSlot
 
@@ -3370,6 +3570,18 @@ local function activateSelectedOption(trigger)
         return true
     end
 
+    if def.kind == "shortcut" then
+        if def.active == false then
+            closeWheel("Inactive shortcut assignment selected")
+            log("Inactive shortcut not executed: " .. tostring(def.id)
+                .. " -> " .. tostring(def.label), true)
+            return true
+        end
+        closeWheel("Shortcut assignment selected")
+        scheduleAssignedMenu(def.id)
+        return true
+    end
+
     if def.kind == "sphere" then
         local alreadyPreviewed = state.hoverPreviewKey
             == ("sphere:" .. tostring(def.sphereId))
@@ -3427,13 +3639,20 @@ state.inputRuntime = InputRuntime.new({
     getPlayerController = getPlayerController, makeFKey = makeFKey,
     isKeyDown = isKeyDown, openWheel = openWheel, closeWheel = closeWheel,
     activateSelectedOption = activateSelectedOption,
-    queueKeyboardToggleRestore = queueKeyboardToggleRestore,
     flushPressedKeys = flushPressedKeys, toggleEditor = toggleEditor,
     handleEditorClick = handleEditorClick,
     enforcePageAimSuppression = enforcePageAimSuppression,
     switchActivePage = switchActivePage,
     visibleSlotCount = activeVisibleSlotCount,
     updateSelectionFromCursor = updateSelectionFromCursor,
+    controllerSelectionMagnitude = function(pc)
+        if state.controller == nil then return nil end
+        return state.controller:selectionMagnitude(pc)
+    end,
+    updateSelectionFromController = function(pc)
+        if state.controller == nil then return nil end
+        return state.controller:updateSelection(pc)
+    end,
     destroyWidget = destroyWidget,
     destroyCenterNotification = destroyCenterNotification,
     log = log,
@@ -3480,12 +3699,7 @@ function state.tick()
             if keyboardPressed and os.clock() >= state.keyboardOpenHandledAt then
                 state.keyboardOpenHandledAt = os.clock() + 0.12
                 state.ignoreOpenBindUntil = state.keyboardOpenHandledAt
-                if string.upper(tostring(cfg("openKey") or ""))
-                    == string.upper(tostring(cfg("keyboardToggleStateKey") or "")) then
-                    state.keyboardToggleRestorePending = true
-                end
                 if openWheel(state.idlePc, "keyboard") then return end
-                queueKeyboardToggleRestore()
             end
             if state.controller:captureOpen(state.idlePc) then return end
             if os.clock() >= state.uiStackNextPoll then
@@ -3615,5 +3829,5 @@ log("v" .. tostring(cfg("version", "1.0"))
     .. "controller actions stay muted until release and camera resumes after recentering; "
     .. state.settingsKeyName .. " opens the saved assignment editor; Pal, weapon, and sphere slots "
     .. "update Palworld's native HUD selection once per hover change; weapon slots 1-6 are assignable; "
-    .. "the selected PalWheel skin supplies the circular background; Caps Lock is edge-polled before background work; the wheel uses adaptive dividers, a rotating direction ring, centre details, selected-text emphasis, and a short non-blocking reveal; F7 builds incrementally with slot-count and skin dropdowns; "
-    .. "missing-sphere notices are background-free and expire after three seconds.", true)
+    .. "the selected PalWheel skin supplies the circular background; Caps Lock is edge-polled before background work; the wheel uses adaptive dividers, a rotating direction ring, centre details, selected-text emphasis, and a short non-blocking reveal; F7 builds incrementally with slot-count, skin, and paged custom-shortcut selection; "
+    .. "Saved\\shortcuts.tsv supplies configurable keyboard shortcut actions through PalworldKeyInjector; missing-sphere notices are background-free and expire after three seconds.", true)

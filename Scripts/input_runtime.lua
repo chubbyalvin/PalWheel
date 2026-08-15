@@ -240,11 +240,7 @@ function InputRuntime:handleOpenPressed()
         return
     end
     if not o.state.open then
-        if string.upper(tostring(o.cfg("openKey") or ""))
-            == string.upper(tostring(o.cfg("keyboardToggleStateKey") or "")) then
-            o.state.keyboardToggleRestorePending = true
-        end
-        if not o.openWheel(pc, "keyboard") then o.queueKeyboardToggleRestore() end
+        o.openWheel(pc, "keyboard")
         return
     end
     if (os.clock() - o.state.openedAt) >= 0.25 then
@@ -282,7 +278,29 @@ function InputRuntime:pollKeyboardWheel(pc)
             return true
         end
     end
-    o.updateSelectionFromCursor(pc)
+    local controllerMagnitude = nil
+    if type(o.controllerSelectionMagnitude) == "function" then
+        controllerMagnitude = tonumber(o.controllerSelectionMagnitude(pc))
+    end
+
+    local controllerDeadzone = o.clamp(
+        o.cfg("controllerStickDeadzone", 0.25), 0.05, 0.95)
+
+    if controllerMagnitude ~= nil and controllerMagnitude >= controllerDeadzone
+        and type(o.updateSelectionFromController) == "function" then
+        o.state.hybridControllerSelectionActive = true
+        o.updateSelectionFromController(pc)
+    else
+        local mouseMagnitude = o.updateSelectionFromCursor(
+            pc, o.state.hybridControllerSelectionActive == true)
+        local mouseDeadzone = o.clamp(
+            o.cfg("mouseDeadzone", 42), 5,
+            o.clamp(o.cfg("mouseMaxRadius", 220), 60, 800) - 5)
+        if mouseMagnitude ~= nil and mouseMagnitude >= mouseDeadzone then
+            o.state.hybridControllerSelectionActive = false
+        end
+    end
+
     local down = o.isKeyDown(pc, o.state.openFKey)
     if down then o.state.openKeySawDown = true end
     local grace = o.clamp(o.cfg("releaseGraceSeconds", 0.10), 0.05, 0.40)

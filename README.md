@@ -4,7 +4,7 @@
 
 It gives quick access to frequently used actions through **up to three configurable wheels**, with **36 saved assignment positions total** and **4 to 12 visible slots per wheel**. PalWheel is designed primarily for controller use, while still supporting keyboard and mouse.
 
-> **Current version:** 1.2  
+> **Current version:** 1.3  
 > **Author:** CHUBBYALVIN  
 > **Platform:** Palworld for Windows  
 > **Framework:** UE4SS
@@ -17,6 +17,7 @@ It gives quick access to frequently used actions through **up to three configura
 - **36 customizable assignment positions total** — 12 per wheel
 - Independently configure **4–12 visible slots per wheel**
 - Controller and keyboard/mouse support
+- Hybrid input support — a wheel opened from keyboard/Steam Input can also be navigated with the controller Right Stick
 - In-game **F7 assignment editor**
 - Automatic saving of user settings and assignments
 - Configurable wheel skins
@@ -27,7 +28,8 @@ It gives quick access to frequently used actions through **up to three configura
 - Weapon, Pal and sphere hover/selection previews
 - Input and camera handling while the wheel is open
 - **Assignable vanilla Palworld emotes**
-- Separate user-generated settings and assignment files
+- **Configurable custom keyboard shortcut actions** for Palworld and other mods
+- Separate user-generated settings, assignment and shortcut files
 
 ### Assignable actions
 
@@ -53,6 +55,11 @@ It gives quick access to frequently used actions through **up to three configura
 - Technology
 - Party
 - Build
+
+#### Custom Shortcuts
+- User-defined keyboard shortcut actions from `Saved\shortcuts.tsv`
+- Supports single keys and Ctrl / Shift / Alt combinations
+- Up to 36 active/selectable custom shortcut definitions at a time
 
 #### Pal Spheres
 - Pal Sphere
@@ -145,6 +152,19 @@ keyboardPageButton = "RIGHT_MOUSE_BUTTON",
 
 Change these values in `Saved\settings.lua` if you prefer a different controller or keyboard/mouse layout.
 
+### Custom shortcut actions
+
+PalWheel v1.3 also generates:
+
+```text
+PalWheel\Saved\shortcuts.tsv
+```
+
+This TAB-separated file defines keyboard shortcut actions that can be assigned to wheel slots, including shortcuts used by other mods. The default Character, Inventory, Party, Technology and Build actions are also defined here.
+
+Each row contains a stable ID, display label, key, Ctrl / Shift / Alt options, and an `active` setting. The first 36 valid active shortcuts are available in the assignment picker. Existing assignments to an inactive shortcut are preserved but do not execute until that shortcut is enabled again.
+
+Restart Palworld after manually editing `shortcuts.tsv`. Modifier keys are injected as real keypresses, so a modifier that is also bound to a Palworld gameplay action may trigger that action as well. Windows-key shortcuts and unsafe system combinations are not supported.
 
 ---
 
@@ -155,11 +175,12 @@ Press **F7** in-game to open the assignment editor.
 The editor displays **Wheel I, Wheel II and Wheel III** side by side and lets you:
 
 - Assign functions to all **36 saved assignment positions**
-- Choose from grouped categories including Weapons, Party, Game Menus, Spheres, Emotes, Utility and General
+- Choose from grouped categories including Weapons, Party, Spheres, Emotes, PalWheel and Custom Shortcuts
 - Select whether **1, 2, or 3 wheels** are active
 - Independently configure **4–12 visible slots for each wheel**
 - Select an installed wheel skin
 - Enable or disable **Slow Motion**
+- Reset custom shortcut definitions to their defaults with confirmation
 - Automatically save assignments and settings
 
 All three wheel columns remain available in the editor even when fewer than three wheels are enabled, allowing additional wheels to be configured before enabling them.
@@ -175,6 +196,7 @@ The editor uses direct mouse clicks for assignment changes.
 While PalWheel is open:
 
 - Mouse direction or Right Stick direction selects a slot around the wheel.
+- A keyboard-opened wheel can also be navigated with the controller Right Stick; mouse movement can take selection ownership again.
 - The configured page button cycles between the currently enabled wheels.
 - The camera is clamped while the wheel is active.
 - Slow Motion can be enabled or disabled from the assignment editor.
@@ -186,7 +208,7 @@ While PalWheel is open:
 - Sphere actions check inventory and attempt to equip the selected sphere type.
 - Emote actions directly trigger the assigned vanilla Palworld emote.
 - The World Map uses a native UI call.
-- Other supported menus use deferred key input.
+- Configurable shortcut actions use deferred keyboard input through `PalworldKeyInjector.dll`.
 - Closing the wheel restores cursor, input, camera and time state.
 
 PalWheel only opens during normal playable world state and stays closed while blocking Palworld UI is active.
@@ -228,6 +250,7 @@ PalWheel automatically creates:
 ```text
 PalWheel\Saved\settings.lua
 PalWheel\Saved\assignments.lua
+PalWheel\Saved\shortcuts.tsv
 ```
 
 Close the game before manually editing generated settings files.
@@ -252,11 +275,14 @@ These define default appearance, timing, controls, input mappings and behavior.
 ```text
 Saved\settings.lua
 Saved\assignments.lua
+Saved\shortcuts.tsv
 ```
 
 `settings.lua` stores user-facing preferences and controls, including the number of enabled wheels and the visible slot count for each wheel.
 
 `assignments.lua` stores the **36 assignment IDs** used by Wheel I, Wheel II and Wheel III.
+
+`shortcuts.tsv` stores configurable keyboard shortcut actions. The first 36 valid active definitions are selectable, while inactive definitions can remain assigned without executing until re-enabled.
 
 The generated files are written separately so updates to the mod do not need to overwrite user choices.
 
@@ -297,18 +323,23 @@ PalWheel\
 │  └─ README.txt
 │
 ├─ Scripts\
+│  ├─ PalworldKeyInjector.dll
 │  ├─ config.lua
 │  ├─ controller.lua
 │  ├─ editor_builder.lua
 │  ├─ input_runtime.lua
-│  ├─ keyinject.dll
 │  ├─ main.lua
 │  ├─ mappings.lua
 │  ├─ menu_actions.lua
 │  ├─ pal_actions.lua
+│  ├─ palworld_keyinjector.lua
 │  ├─ runtime_loops.lua
+│  ├─ shortcut_actions.lua
 │  ├─ sphere_actions.lua
 │  └─ wheel_visuals.lua
+│
+├─ THIRD_PARTY_LICENSES\
+│  └─ PalworldKeyInjector-MIT.txt
 │
 ├─ LICENSE.md
 └─ README.md
@@ -320,16 +351,18 @@ PalWheel\
 |---|---|
 | `main.lua` | Core state, saved data, action catalogue, UMG construction, UI guards and wheel/editor lifecycle |
 | `config.lua` | Packaged defaults for layout, appearance, timing and features |
-| `mappings.lua` | Default keyboard, mouse and controller mappings and menu shortcut definitions |
+| `mappings.lua` | Default keyboard, mouse and controller mappings |
 | `controller.lua` | Controller session handling, radial selection, wheel switching and close-on-button behavior |
 | `input_runtime.lua` | Keyboard/mouse polling, release activation and wheel-session handling |
 | `editor_builder.lua` | F7 editor, assignment rows, grouped function picker and dropdowns |
 | `wheel_visuals.lua` | Wheel centre details, direction visuals, selection styling and reveal behavior |
-| `menu_actions.lua` | Deferred menu actions, DLL loading and keyboard toggle restoration |
+| `menu_actions.lua` | Deferred configurable shortcut actions and PalworldKeyInjector integration |
 | `pal_actions.lua` | Party lookup, Pal selection and summoning |
 | `sphere_actions.lua` | Sphere ownership checks, cycling and verification |
 | `runtime_loops.lua` | Recurring selection, input and camera update loops |
-| `keyinject.dll` | Windows x64 helper used by supported deferred key actions and keyboard-state restoration |
+| `shortcut_actions.lua` | Generation, loading, validation and reset handling for `Saved\shortcuts.tsv` |
+| `palworld_keyinjector.lua` | Lua wrapper for the PalworldKeyInjector API |
+| `PalworldKeyInjector.dll` | Windows x64 helper used by configurable deferred keyboard shortcut actions |
 
 ---
 
@@ -359,13 +392,17 @@ Close Palworld before editing the file.
 
 ### Menu actions do not match remapped Palworld controls
 
-Some supported menu shortcuts depend on Palworld's keyboard bindings. Update the relevant shortcut mappings in:
+Character, Inventory, Party, Technology and Build use configurable keyboard shortcut definitions. Update the relevant key in:
 
 ```text
-Scripts\mappings.lua
+PalWheel\Saved\shortcuts.tsv
 ```
 
-if those Palworld controls have been remapped.
+if those Palworld controls have been remapped, then restart Palworld.
+
+### Custom shortcut does not appear in the assignment picker
+
+Check `PalWheel\Saved\shortcuts.tsv` and confirm the row is valid and `active` is set to `true`. Only the first 36 valid active shortcut definitions are selectable. Invalid rows are reported in the UE4SS log.
 
 ### Remapped movement keys cause the wheel to close
 
@@ -389,7 +426,7 @@ and that the skin name matches the saved setting.
 
 ## Planned / Possible Future Updates
 
-PalWheel v1.2 expands the wheel architecture while retaining the existing controller-focused design.
+PalWheel v1.3 expands PalWheel with configurable shortcut actions and hybrid input while retaining the existing controller-focused design.
 
 Ideas being explored for future versions include:
 
