@@ -4,7 +4,7 @@
 
 It gives quick access to frequently used actions through **up to three configurable wheels**, with **36 saved assignment positions total** and **4 to 12 visible slots per wheel**. PalWheel is designed primarily for controller use, while still supporting keyboard and mouse.
 
-> **Current version:** 1.3  
+> **Current version:** 1.4  
 > **Author:** CHUBBYALVIN  
 > **Platform:** Palworld for Windows  
 > **Framework:** UE4SS
@@ -29,6 +29,7 @@ It gives quick access to frequently used actions through **up to three configura
 - Input and camera handling while the wheel is open
 - **Assignable vanilla Palworld emotes**
 - **Configurable custom keyboard shortcut actions** for Palworld and other mods
+- **Automatic expanded-party support** — dynamically shows Pal 6+ when the local party capacity is increased by a compatible mod
 - Separate user-generated settings, assignment and shortcut files
 
 ### Assignable actions
@@ -42,11 +43,9 @@ It gives quick access to frequently used actions through **up to three configura
 - Weapon 6
 
 #### Party Pals
-- Pal 1
-- Pal 2
-- Pal 3
-- Pal 4
-- Pal 5
+- Pal 1 through Pal 5 on a standard Palworld party
+- When another mod expands the local party capacity, PalWheel automatically exposes matching additional Pal slots (Pal 6, Pal 7, and so on)
+- Expanded-party assignments remain saved if the extra capacity is later unavailable and become usable again when that capacity returns
 
 #### Game Menus
 - Character
@@ -154,7 +153,7 @@ Change these values in `Saved\settings.lua` if you prefer a different controller
 
 ### Custom shortcut actions
 
-PalWheel v1.3 also generates:
+PalWheel also generates:
 
 ```text
 PalWheel\Saved\shortcuts.tsv
@@ -176,6 +175,7 @@ The editor displays **Wheel I, Wheel II and Wheel III** side by side and lets yo
 
 - Assign functions to all **36 saved assignment positions**
 - Choose from grouped categories including Weapons, Party, Spheres, Emotes, PalWheel and Custom Shortcuts
+- Automatically page the Party picker when more than 10 Pal slots are available
 - Select whether **1, 2, or 3 wheels** are active
 - Independently configure **4–12 visible slots for each wheel**
 - Select an installed wheel skin
@@ -204,7 +204,7 @@ While PalWheel is open:
 - Allowed movement inputs can remain active.
 - On controller, most other buttons close PalWheel and continue to their normal game action.
 - Weapon, Pal and sphere slots can preview their selection when highlighted.
-- Pal actions select the corresponding party slot and summon the Pal near the player.
+- Pal actions select the corresponding party slot and summon the Pal near the player. PalWheel reads the local party holder's reported maximum capacity, so compatible expanded-party mods can expose Pal 6 and above automatically.
 - Sphere actions check inventory and attempt to equip the selected sphere type.
 - Emote actions directly trigger the assigned vanilla Palworld emote.
 - The World Map uses a native UI call.
@@ -425,8 +425,6 @@ and that the skin name matches the saved setting.
 ---
 
 ## Planned / Possible Future Updates
-
-PalWheel v1.3 expands PalWheel with configurable shortcut actions and hybrid input while retaining the existing controller-focused design.
 
 Ideas being explored for future versions include:
 
