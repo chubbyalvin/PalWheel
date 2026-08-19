@@ -1,6 +1,6 @@
 return {
     enabled = true,
-    version = "1.3",
+    version = "1.4",
 
     screenWidth = 1920,
     screenHeight = 1080,

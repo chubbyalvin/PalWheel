@@ -55,6 +55,7 @@ function InputRuntime.new(options)
         s.sessionReady, s.activePalSlot = true, nil
         s.cachedGameInstance, s.cachedFishing, s.cachedPlayer = nil, nil, nil
         s.cachedPartyHolder, s.uiStackBaseline, s.uiStackPending = nil, nil, nil
+        s.partyCapacityNextPoll = 0.0
         s.uiStackLearned, s.uiStackOpen, s.uiStackUnreadableLogged = false, false, false
         s.uiStackCount, s.uiStackLastX, s.uiStackLastY = nil, nil, nil
         s.uiStackNextPoll, s.idlePc = 0.0, nil

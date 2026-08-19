@@ -219,6 +219,8 @@ function Shortcuts.load(path, options)
                 ctrl, shift, alt, enabled = parseBool(fields[4]), parseBool(fields[5]), parseBool(fields[6]), parseBool(fields[7])
                 if id == "" or not string.match(id, "^[A-Za-z0-9_-]+$") then
                     rejection = "id must contain only letters, numbers, underscore, or hyphen"
+                elseif string.match(string.lower(id), "^pal%d+$") then
+                    rejection = "id conflicts with a PalWheel party action: " .. id
                 elseif reserved[id] == true then
                     rejection = "id conflicts with a PalWheel action: " .. id
                 elseif seen[id] then

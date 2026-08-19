@@ -153,7 +153,30 @@ local PAGE_COUNT = 3
 local TOTAL_ASSIGNMENT_SLOTS = PAGE_SIZE * PAGE_COUNT
 local MIN_VISIBLE_SLOTS = 4
 local MAX_VISIBLE_SLOTS = 12
+local DEFAULT_PARTY_CAPACITY = 5
+local MAX_DYNAMIC_PARTY_CAPACITY = 4096
+local PARTY_PICKER_PAGE_SIZE = 10
 local MOUSE_LOCK_DO_NOT_LOCK = 0
+
+local function partyActionNumber(id)
+    if type(id) ~= "string" then return nil end
+    local number = tonumber(string.match(string.lower(id), "^pal(%d+)$"))
+    if number == nil then return nil end
+    number = math.floor(number)
+    if number < 1 or number > MAX_DYNAMIC_PARTY_CAPACITY then return nil end
+    return number
+end
+
+local function makePartyDefinition(number)
+    number = math.floor(tonumber(number) or 1)
+    return {
+        id = "pal" .. tostring(number),
+        label = "Pal " .. tostring(number),
+        short = "P" .. tostring(number),
+        kind = "pal",
+        index = number - 1,
+    }
+end
 
 local function assetFileExists(filename)
     if io == nil or type(io.open) ~= "function" then return false end
@@ -197,6 +220,32 @@ end
 if savedSettings.wheelSkin ~= nil then
     config.wheelSkin = validWheelSkin(savedSettings.wheelSkin)
 end
+
+local assignmentsFileLoaded = false
+local function loadSavedAssignments()
+    if type(loadfile) ~= "function" then return nil end
+    local chunk = loadfile(ASSIGNMENTS_PATH)
+    if type(chunk) ~= "function" then return nil end
+    local ok, values = pcall(chunk)
+    if not ok or type(values) ~= "table" then return nil end
+    assignmentsFileLoaded = true
+    return values.assignments or values
+end
+
+local savedAssignments = loadSavedAssignments()
+if type(savedAssignments) ~= "table" then savedAssignments = savedSettings.assignments end
+
+local function maxReferencedPartySlot(assignments)
+    local maximum = DEFAULT_PARTY_CAPACITY
+    if type(assignments) ~= "table" then return maximum end
+    for _, id in pairs(assignments) do
+        local number = partyActionNumber(id)
+        if number ~= nil and number > maximum then maximum = number end
+    end
+    return maximum
+end
+
+local INITIAL_PARTY_CATALOG_CAPACITY = maxReferencedPartySlot(savedAssignments)
 
 local COLORS = {
     background = { R = 0.0, G = 0.0, B = 0.0,
@@ -289,11 +338,17 @@ else
     } }
 end
 
-local function rebuildFunctionCatalog(data)
+local function rebuildFunctionCatalog(data, partyCatalogCapacity)
     for key in pairs(FUNCTION_BY_ID) do FUNCTION_BY_ID[key] = nil end
     for index = #FUNCTION_CATALOG, 1, -1 do FUNCTION_CATALOG[index] = nil end
     for _, base in ipairs(BASE_FUNCTION_CATALOG) do
         FUNCTION_CATALOG[#FUNCTION_CATALOG + 1] = base
+    end
+    local dynamicCapacity = math.floor(clamp(
+        tonumber(partyCatalogCapacity) or DEFAULT_PARTY_CAPACITY,
+        DEFAULT_PARTY_CAPACITY, MAX_DYNAMIC_PARTY_CAPACITY))
+    for number = DEFAULT_PARTY_CAPACITY + 1, dynamicCapacity do
+        FUNCTION_CATALOG[#FUNCTION_CATALOG + 1] = makePartyDefinition(number)
     end
     for _, def in ipairs((data and data.definitions) or {}) do
         FUNCTION_CATALOG[#FUNCTION_CATALOG + 1] = def
@@ -305,7 +360,7 @@ local function rebuildFunctionCatalog(data)
     ACTIVE_SHORTCUTS = (data and data.active) or {}
 end
 
-rebuildFunctionCatalog(shortcutData)
+rebuildFunctionCatalog(shortcutData, INITIAL_PARTY_CATALOG_CAPACITY)
 
 local DEFAULT_ASSIGNMENTS = {
     "mercy", "pal1", "pal2", "pal3",
@@ -363,20 +418,6 @@ for page = 1, PAGE_COUNT do
         value, MIN_VISIBLE_SLOTS, MAX_VISIBLE_SLOTS))
 end
 
-local assignmentsFileLoaded = false
-local function loadSavedAssignments()
-    if type(loadfile) ~= "function" then return nil end
-    local chunk = loadfile(ASSIGNMENTS_PATH)
-    if type(chunk) ~= "function" then return nil end
-    local ok, values = pcall(chunk)
-    if not ok or type(values) ~= "table" then return nil end
-    assignmentsFileLoaded = true
-    return values.assignments or values
-end
-
-local savedAssignments = loadSavedAssignments()
-if type(savedAssignments) ~= "table" then savedAssignments = savedSettings.assignments end
-
 local state = {
     open = false,
     editorOpen = false,
@@ -429,6 +470,9 @@ local state = {
     sphereSelectionQueue = nil,
     hoverPreviewKey = nil,
     activePalSlot = nil,
+    partyCapacity = DEFAULT_PARTY_CAPACITY,
+    partyCatalogCapacity = INITIAL_PARTY_CATALOG_CAPACITY,
+    partyCapacityNextPoll = 0.0,
     ignoreOpenBindUntil = 0.0,
     keyboardCancelInputs = {},
     keyboardCancelWasDown = {},
@@ -470,6 +514,15 @@ local state = {
     editorPickerTitle = nil,
     editorPickerWidgets = {},
     editorPickerRects = {},
+    editorPartyWidgets = {},
+    editorPartyRects = {},
+    editorPartyRowIds = {},
+    editorPartyPage = 1,
+    editorPartyPageText = nil,
+    editorPartyPrevRect = nil,
+    editorPartyNextRect = nil,
+    editorPartyPrevWidgets = {},
+    editorPartyNextWidgets = {},
     editorShortcutWidgets = {},
     editorShortcutRects = {},
     editorShortcutRowIds = {},
@@ -1064,6 +1117,8 @@ end
 local function normalizedName(value)
     return state.palActions:normalizedName(value)
 end
+
+local refreshPartyCapacity = nil
 
 local function previewAssignmentNatively(def, source)
     local key = nil
@@ -2047,6 +2102,15 @@ local function destroyWidget()
     state.editorPickerTitle = nil
     state.editorPickerWidgets = {}
     state.editorPickerRects = {}
+    state.editorPartyWidgets = {}
+    state.editorPartyRects = {}
+    state.editorPartyRowIds = {}
+    state.editorPartyPage = 1
+    state.editorPartyPageText = nil
+    state.editorPartyPrevRect = nil
+    state.editorPartyNextRect = nil
+    state.editorPartyPrevWidgets = {}
+    state.editorPartyNextWidgets = {}
     state.editorShortcutWidgets = {}
     state.editorShortcutRects = {}
     state.editorShortcutRowIds = {}
@@ -2567,6 +2631,34 @@ local function invalidateWheelPanel()
     if state.callVisual ~= nil then state.callVisual("reset") end
 end
 
+refreshPartyCapacity = function(force)
+    local now = os.clock()
+    if force ~= true and now < (state.partyCapacityNextPoll or 0.0) then
+        return false
+    end
+    state.partyCapacityNextPoll = now + 1.0
+
+    local holder = state.palActions and state.palActions:getHolder() or nil
+    local detected = state.palActions and state.palActions:getPartyCapacity(holder) or nil
+    if detected == nil then return false end
+    detected = math.floor(clamp(detected, 1, MAX_DYNAMIC_PARTY_CAPACITY))
+
+    local changed = detected ~= state.partyCapacity
+    local catalogGrew = detected > (state.partyCatalogCapacity or DEFAULT_PARTY_CAPACITY)
+    if catalogGrew then
+        state.partyCatalogCapacity = detected
+        rebuildFunctionCatalog(shortcutData, state.partyCatalogCapacity)
+        invalidateWheelPanel()
+    end
+    if changed then
+        state.partyCapacity = detected
+        state.editorPartyPage = 1
+        log("Party capacity detected: " .. tostring(detected)
+            .. (detected > DEFAULT_PARTY_CAPACITY and " (expanded party support active)" or ""), true)
+    end
+    return changed or catalogGrew
+end
+
 rebuildWheelForActivePage = function()
     invalidateWheelPanel()
     if not buildWidget(state.pc) then return false end
@@ -2859,7 +2951,16 @@ local function buildEditorWidget(pc)
             title = "PARTY",
             x = pickerX + 253,
             width = 190,
-            ids = { "pal1", "pal2", "pal3", "pal4", "pal5" },
+            ids = (function()
+                local ids = {}
+                local count = math.min(
+                    tonumber(state.partyCapacity) or DEFAULT_PARTY_CAPACITY,
+                    PARTY_PICKER_PAGE_SIZE)
+                for number = 1, count do
+                    ids[#ids + 1] = "pal" .. tostring(number)
+                end
+                return ids
+            end)(),
         },
         {
             title = "GAME MENUS",
@@ -2979,6 +3080,48 @@ end
 
 local SHORTCUT_PICKER_PAGE_SIZE = 10
 
+local function partyPickerPageCount()
+    return math.max(1, math.ceil((tonumber(state.partyCapacity)
+        or DEFAULT_PARTY_CAPACITY) / PARTY_PICKER_PAGE_SIZE))
+end
+
+local function updatePartyPickerPage()
+    local pageCount = partyPickerPageCount()
+    state.editorPartyPage = math.floor(clamp(state.editorPartyPage or 1, 1, pageCount))
+    local startNumber = (state.editorPartyPage - 1) * PARTY_PICKER_PAGE_SIZE + 1
+    state.editorPartyRowIds = {}
+    for row = 1, PARTY_PICKER_PAGE_SIZE do
+        local widgets = (state.editorPartyWidgets or {})[row]
+        local number = startNumber + row - 1
+        local id = number <= (tonumber(state.partyCapacity) or DEFAULT_PARTY_CAPACITY)
+            and ("pal" .. tostring(number)) or nil
+        local def = id and FUNCTION_BY_ID[id] or nil
+        local rowVisible = state.editorPickerOpen == true and def ~= nil
+        if type(widgets) == "table" then
+            setVisible(widgets.border, rowVisible)
+            setVisible(widgets.text, rowVisible)
+            if def ~= nil then
+                setBorderColor(widgets.border, colorForDefinition(def))
+                setText(widgets.text, tostring(def.label))
+            end
+        end
+        state.editorPartyRowIds[row] = def and def.id or nil
+    end
+    if alive(state.editorPartyPageText) then
+        setText(state.editorPartyPageText, tostring(state.editorPartyPage)
+            .. "/" .. tostring(pageCount))
+        setVisible(state.editorPartyPageText,
+            state.editorPickerOpen == true and pageCount > 1)
+    end
+    local showPaging = state.editorPickerOpen == true and pageCount > 1
+    for _, widget in ipairs(state.editorPartyPrevWidgets or {}) do
+        setVisible(widget, showPaging)
+    end
+    for _, widget in ipairs(state.editorPartyNextWidgets or {}) do
+        setVisible(widget, showPaging)
+    end
+end
+
 local function shortcutPickerPageCount()
     return math.max(1, math.ceil(#(ACTIVE_SHORTCUTS or {}) / SHORTCUT_PICKER_PAGE_SIZE))
 end
@@ -3018,6 +3161,7 @@ local function setPickerVisible(visible)
     for _, widget in ipairs(state.editorPickerWidgets or {}) do
         setVisible(widget, visible == true)
     end
+    updatePartyPickerPage()
     updateShortcutPickerPage()
 end
 
@@ -3075,7 +3219,10 @@ local function openAssignmentPicker(slotIndex)
     closeEditorDropdowns()
     setResetConfirmVisible(false)
     state.editorPickingSlot = slotIndex
-    state.editorShortcutPage = math.floor(clamp(state.editorShortcutPage or 1, 1, shortcutPickerPageCount()))
+    state.editorPartyPage = math.floor(clamp(
+        state.editorPartyPage or 1, 1, partyPickerPageCount()))
+    state.editorShortcutPage = math.floor(clamp(
+        state.editorShortcutPage or 1, 1, shortcutPickerPageCount()))
     if alive(state.editorPickerTitle) then
         local pie = math.floor((slotIndex - 1) / PAGE_SIZE) + 1
         local localSlot = ((slotIndex - 1) % PAGE_SIZE) + 1
@@ -3130,7 +3277,7 @@ local function resetShortcutsToDefaults()
         return false
     end
     shortcutData = reloaded
-    rebuildFunctionCatalog(shortcutData)
+    rebuildFunctionCatalog(shortcutData, state.partyCatalogCapacity)
     local removed = 0
     for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
         local id = state.assignments[slotIndex]
@@ -3216,6 +3363,27 @@ local function handleEditorClick(direction)
             closeAssignmentPicker()
             return
         end
+        local partyPageCount = partyPickerPageCount()
+        if partyPageCount > 1 and pointInRect(x, y, state.editorPartyPrevRect) then
+            state.editorPartyPage = state.editorPartyPage - 1
+            if state.editorPartyPage < 1 then state.editorPartyPage = partyPageCount end
+            updatePartyPickerPage()
+            return
+        end
+        if partyPageCount > 1 and pointInRect(x, y, state.editorPartyNextRect) then
+            state.editorPartyPage = state.editorPartyPage + 1
+            if state.editorPartyPage > partyPageCount then state.editorPartyPage = 1 end
+            updatePartyPickerPage()
+            return
+        end
+        for row, rect in ipairs(state.editorPartyRects or {}) do
+            local id = state.editorPartyRowIds and state.editorPartyRowIds[row] or nil
+            if id ~= nil and pointInRect(x, y, rect) then
+                assignPickerChoiceById(id)
+                return
+            end
+        end
+
         local pageCount = shortcutPickerPageCount()
         if pageCount > 1 and pointInRect(x, y, state.editorShortcutPrevRect) then
             state.editorShortcutPage = state.editorShortcutPage - 1
@@ -3308,6 +3476,7 @@ local function closeEditor(reason)
 end
 
 local function openEditor(pc)
+    if refreshPartyCapacity ~= nil then refreshPartyCapacity(true) end
     local allowed, reason = canOpenWheelDuringGameplay(pc)
     if not allowed then
         log("Editor not opened: " .. tostring(reason), true)
@@ -3454,6 +3623,7 @@ end
 
 local function openWheel(pc, inputSource)
     if state.editorOpen then return false end
+    if refreshPartyCapacity ~= nil then refreshPartyCapacity(true) end
     local allowed, reason = canOpenWheelDuringGameplay(pc)
     if not allowed then
         log("Wheel not opened: " .. tostring(reason), true)
@@ -3691,6 +3861,7 @@ function state.tick()
             state.idlePc = getPlayerController()
         end
         if alive(state.idlePc) then
+            if refreshPartyCapacity ~= nil then refreshPartyCapacity(false) end
             state.inputRuntime:updateReleaseGuard(state.idlePc)
             local keyboardDown = isKeyDown(state.idlePc, state.openFKey)
             local keyboardPressed = keyboardDown
@@ -3830,4 +4001,4 @@ log("v" .. tostring(cfg("version", "1.0"))
     .. state.settingsKeyName .. " opens the saved assignment editor; Pal, weapon, and sphere slots "
     .. "update Palworld's native HUD selection once per hover change; weapon slots 1-6 are assignable; "
     .. "the selected PalWheel skin supplies the circular background; Caps Lock is edge-polled before background work; the wheel uses adaptive dividers, a rotating direction ring, centre details, selected-text emphasis, and a short non-blocking reveal; F7 builds incrementally with slot-count, skin, and paged custom-shortcut selection; "
-    .. "Saved\\shortcuts.tsv supplies configurable keyboard shortcut actions through PalworldKeyInjector; missing-sphere notices are background-free and expire after three seconds.", true)
+    .. "Saved\\shortcuts.tsv supplies configurable keyboard shortcut actions through PalworldKeyInjector; party capacity is detected from Palworld's party holder so expanded-party slots can be exposed dynamically; missing-sphere notices are background-free and expire after three seconds.", true)

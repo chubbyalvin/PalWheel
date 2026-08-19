@@ -219,8 +219,6 @@ function Builder:beginPicker()
     self.picker = {
         { title = "WEAPONS", x = 225, width = 170,
             ids = { "weapon1", "weapon2", "weapon3", "weapon4", "weapon5", "weapon6" } },
-        { title = "PARTY", x = 407, width = 155,
-            ids = { "pal1", "pal2", "pal3", "pal4", "pal5" } },
         { title = "SPHERES", x = 574, width = 220,
             ids = { "sphere_pal", "sphere_mega", "sphere_giga", "sphere_hyper",
                 "sphere_ultra", "sphere_legendary", "sphere_ultimate",
@@ -289,6 +287,47 @@ end
 
 function Builder:finish()
     local o, state = self.o, self.o.state
+    state.editorPartyWidgets = {}
+    state.editorPartyRects = {}
+    state.editorPartyRowIds = {}
+    local partyX, partyW = 407, 155
+    local partyHeaderBorder, partyHeaderText = self:cell(
+        partyX, 276, partyW, 36, o.colors.button, "PARTY", 12, 14)
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = partyHeaderBorder
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = partyHeaderText
+    o.setVisible(partyHeaderBorder, false)
+    o.setVisible(partyHeaderText, false)
+    for row = 1, 10 do
+        local y = 326 + (row - 1) * 48
+        local border, label = self:cell(
+            partyX, y, partyW, 42, o.colors.pal, "", 10, 13)
+        state.editorPartyWidgets[row] = { border = border, text = label }
+        state.editorPartyRects[row] = { x = partyX, y = y, w = partyW, h = 42 }
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = border
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = label
+        o.setVisible(border, false)
+        o.setVisible(label, false)
+    end
+    local partyPrevBorder, partyPrevText = self:cell(
+        partyX, 810, 48, 34, o.colors.button, "<", 17, 12)
+    local partyNextBorder, partyNextText = self:cell(
+        partyX + partyW - 48, 810, 48, 34, o.colors.button, ">", 17, 12)
+    state.editorPartyPrevRect = { x = partyX, y = 810, w = 48, h = 34 }
+    state.editorPartyNextRect = {
+        x = partyX + partyW - 48, y = 810, w = 48, h = 34
+    }
+    state.editorPartyPrevWidgets = { partyPrevBorder, partyPrevText }
+    state.editorPartyNextWidgets = { partyNextBorder, partyNextText }
+    state.editorPartyPageText = o.createText(
+        state.tree, self.root, "1/1", partyX + 52, 815, partyW - 104, 24, 11)
+    for _, widget in ipairs({
+        partyPrevBorder, partyPrevText, partyNextBorder, partyNextText,
+        state.editorPartyPageText
+    }) do
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = widget
+        o.setVisible(widget, false)
+    end
+
     state.editorShortcutWidgets = {}
     state.editorShortcutRects = {}
     state.editorShortcutRowIds = {}
@@ -423,7 +462,7 @@ function Builder:finish()
     self.phase = "done"
     self.completedUnits = self.totalUnits
     self:updateProgress()
-    o.log("Incremental 36-slot / three-wheel editor and grouped picker completed", true)
+    o.log("Incremental 36-slot / three-wheel editor and dynamic party picker completed", true)
 end
 
 function Builder:step(maxUnits)
