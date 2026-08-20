@@ -510,6 +510,8 @@ local state = {
     editorSkinOptionRects = {},
     editorPickerOpen = false,
     editorPickingSlot = nil,
+    editorPickerLayer = nil,
+    editorPickerChildrenInitialized = false,
     editorPickerPanel = nil,
     editorPickerTitle = nil,
     editorPickerWidgets = {},
@@ -2101,6 +2103,8 @@ local function destroyWidget()
     state.editorSkinOptionRects = {}
     state.editorPickerOpen = false
     state.editorPickingSlot = nil
+    state.editorPickerLayer = nil
+    state.editorPickerChildrenInitialized = false
     state.editorPickerPanel = nil
     state.editorPickerTitle = nil
     state.editorPickerWidgets = {}
@@ -3161,6 +3165,20 @@ end
 
 local function setPickerVisible(visible)
     state.editorPickerOpen = visible == true
+    if alive(state.editorPickerLayer) then
+        if visible == true then
+            if state.editorPickerChildrenInitialized ~= true then
+                for _, widget in ipairs(state.editorPickerWidgets or {}) do
+                    setVisible(widget, true)
+                end
+                state.editorPickerChildrenInitialized = true
+            end
+            updatePartyPickerPage()
+            updateShortcutPickerPage()
+        end
+        setVisible(state.editorPickerLayer, visible == true)
+        return
+    end
     for _, widget in ipairs(state.editorPickerWidgets or {}) do
         setVisible(widget, visible == true)
     end
@@ -3407,7 +3425,7 @@ local function handleEditorClick(direction)
                 return
             end
         end
-        for catalogIndex, rect in ipairs(state.editorPickerRects or {}) do
+        for catalogIndex, rect in pairs(state.editorPickerRects or {}) do
             if pointInRect(x, y, rect) then
                 assignPickerChoice(catalogIndex)
                 return

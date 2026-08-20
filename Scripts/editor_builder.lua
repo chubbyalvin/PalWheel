@@ -23,6 +23,7 @@ function Builder.new(options)
         picker = nil,
         totalUnits = 69,
         completedUnits = 0,
+        editorRoot = nil,
     }, Builder)
 end
 
@@ -198,6 +199,18 @@ end
 
 function Builder:beginPicker()
     local o, state = self.o, self.o.state
+    local pickerLayer = o.construct("/Script/UMG.CanvasPanel", state.tree)
+    local layerSlot = pickerLayer and o.addToCanvas(self.root, pickerLayer) or nil
+    if layerSlot ~= nil then
+        o.place(layerSlot, 0, 0,
+            tonumber(o.cfg("screenWidth", 1920)) or 1920,
+            tonumber(o.cfg("screenHeight", 1080)) or 1080)
+        o.setVisible(pickerLayer, false)
+        self.editorRoot = self.root
+        self.root = pickerLayer
+        state.editorPickerLayer = pickerLayer
+        state.editorPickerChildrenInitialized = false
+    end
     local pickerX, pickerY, pickerW, pickerH = 205, 188, 1510, 690
     local panel = o.construct("/Script/UMG.Border", state.tree)
     local slot = panel and o.addToCanvas(self.root, panel) or nil
@@ -388,6 +401,7 @@ function Builder:finish()
         710, 832, 500, 28, 12)
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = help
     o.setVisible(help, false)
+    if self.editorRoot ~= nil then self.root = self.editorRoot end
     local displayName = o.cfg("displayName", nil)
     local openKeyboard = tostring(o.cfg("openKey") or "")
     local pageKeyboard = tostring(o.cfg("keyboardPageButton") or "")
