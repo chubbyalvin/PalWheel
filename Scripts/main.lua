@@ -565,6 +565,7 @@ local state = {
     cachedGameInstance = nil,
     cachedFishing = nil,
     cachedPlayer = nil,
+    playerCacheNextPoll = 0.0,
     cachedPartyHolder = nil,
     keyInjectDll = SCRIPT_DIRECTORY .. "\\PalworldKeyInjector.dll",
     wheelBackgroundTexture = nil,
@@ -909,7 +910,9 @@ local function getLocalPlayerCharacter()
         end
     end
 
-    if alive(state.cachedPlayer) then return state.cachedPlayer end
+    if alive(state.cachedPlayer) and hasLoadout(state.cachedPlayer) then
+        return state.cachedPlayer
+    end
     return nil
 end
 
@@ -3861,6 +3864,10 @@ function state.tick()
             state.idlePc = getPlayerController()
         end
         if alive(state.idlePc) then
+            if os.clock() >= (state.playerCacheNextPoll or 0.0) then
+                state.playerCacheNextPoll = os.clock() + 1.0
+                getLocalPlayerCharacter()
+            end
             if refreshPartyCapacity ~= nil then refreshPartyCapacity(false) end
             state.inputRuntime:updateReleaseGuard(state.idlePc)
             local keyboardDown = isKeyDown(state.idlePc, state.openFKey)

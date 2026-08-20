@@ -53,7 +53,10 @@ function InputRuntime.new(options)
         o.destroyWidget()
         o.destroyCenterNotification()
         s.sessionReady, s.activePalSlot = true, nil
-        s.cachedGameInstance, s.cachedFishing, s.cachedPlayer = nil, nil, nil
+        local playerCacheRetained = o.alive(s.cachedPlayer)
+        s.cachedGameInstance, s.cachedFishing = nil, nil
+        if not playerCacheRetained then s.cachedPlayer = nil end
+        s.playerCacheNextPoll = 0.0
         s.cachedPartyHolder, s.uiStackBaseline, s.uiStackPending = nil, nil, nil
         s.partyCapacityNextPoll = 0.0
         s.uiStackLearned, s.uiStackOpen, s.uiStackUnreadableLogged = false, false, false
@@ -61,7 +64,9 @@ function InputRuntime.new(options)
         s.uiStackNextPoll, s.idlePc = 0.0, nil
         s.keyboardOpenWasDown, s.keyboardOpenHandledAt = false, 0.0
         s.uiPrebuildReadyAt = os.clock() + 5.0
-        o.log("PlayerController restarted; stale UI discarded and fresh text-only UI scheduled", true)
+        o.log("PlayerController restarted; stale UI discarded, player loadout cache "
+            .. (playerCacheRetained and "retained" or "unavailable")
+            .. ", and fresh text-only UI scheduled", true)
     end
     self.restartHookCallback = function()
         ExecuteInGameThread(self.restartGameCallback)
