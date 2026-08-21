@@ -107,8 +107,6 @@ function Builder:start(pc)
             .. settingsKey .. " closes the editor.",
         180, 148, 1200, 32, 14, 0)
 
-    -- Keep the settings row compact so the multiplayer note and shortcut reset
-    -- control can remain visible together at common 16:9 resolutions.
     o.createText(state.tree, editorPanel, "WHEELS", 180, 195, 100, 30, 15)
     local wheelCountBorder
     wheelCountBorder, state.editorWheelCountText = self:cell(
@@ -134,7 +132,7 @@ function Builder:start(pc)
         1095, 195, 220, 24, 10)
 
     local resetBorder, resetText = self:cell(
-        1330, 188, 240, 42, o.colors.button, "RESET SHORTCUTS", 14, 14)
+        1330, 188, 240, 42, o.colors.button, "RESTORE DEFAULTS", 40, 13)
     state.editorResetShortcutsRect = { x = 1330, y = 188, w = 240, h = 42 }
     state.editorResetShortcutsText = resetText
 
@@ -374,6 +372,14 @@ function Builder:finish()
         o.setVisible(widget, false)
     end
 
+    local help = o.createText(state.tree, self.root,
+        "Right-click or click outside the panel to cancel",
+        710, 832, 500, 28, 12)
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = help
+    o.setVisible(help, false)
+
+    if self.editorRoot ~= nil then self.root = self.editorRoot end
+
     local confirmPanel = o.construct("/Script/UMG.Border", state.tree)
     local confirmSlot = confirmPanel and o.addToCanvas(self.root, confirmPanel) or nil
     if confirmSlot ~= nil then
@@ -381,12 +387,12 @@ function Builder:finish()
         o.setBorderColor(confirmPanel, o.colors.panel)
     end
     local confirmOutline = self:outline(625, 365, 670, 260, 2)
-    local confirmTitle = o.createText(state.tree, self.root, "RESET CUSTOM SHORTCUTS?",
+    local confirmTitle = o.createText(state.tree, self.root, "RESTORE DEFAULT ASSIGNMENTS?",
         665, 395, 590, 36, 18)
     local confirmBody = o.createText(state.tree, self.root,
-        "Restore Character, Inventory, Party, Technology, and Build to their default shortcuts?\nCustom shortcut definitions will be removed. Affected wheel slots become Unassigned.",
+        "Restore all 36 wheel slots to PalWheel's packaged default layout?\nWheel count, visible slot counts, controls, and custom shortcut definitions will not change.",
         665, 445, 590, 72, 13)
-    local yesBorder, yesText = self:cell(760, 545, 180, 44, o.colors.button, "RESET", 50, 14)
+    local yesBorder, yesText = self:cell(760, 545, 180, 44, o.colors.button, "RESTORE", 42, 14)
     local noBorder, noText = self:cell(980, 545, 180, 44, o.colors.row, "CANCEL", 48, 14)
     state.editorResetConfirmWidgets = { confirmPanel, confirmTitle, confirmBody, yesBorder, yesText, noBorder, noText }
     for _, widget in ipairs(confirmOutline) do
@@ -395,13 +401,6 @@ function Builder:finish()
     state.editorResetConfirmYesRect = { x = 760, y = 545, w = 180, h = 44 }
     state.editorResetConfirmNoRect = { x = 980, y = 545, w = 180, h = 44 }
     for _, widget in ipairs(state.editorResetConfirmWidgets) do o.setVisible(widget, false) end
-
-    local help = o.createText(state.tree, self.root,
-        "Right-click or click outside the panel to cancel",
-        710, 832, 500, 28, 12)
-    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = help
-    o.setVisible(help, false)
-    if self.editorRoot ~= nil then self.root = self.editorRoot end
     local displayName = o.cfg("displayName", nil)
     local openKeyboard = tostring(o.cfg("openKey") or "")
     local pageKeyboard = tostring(o.cfg("keyboardPageButton") or "")

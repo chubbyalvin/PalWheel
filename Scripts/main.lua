@@ -3285,37 +3285,17 @@ local function assignPickerChoiceById(id)
     return true
 end
 
-local function resetShortcutsToDefaults()
-    if type(ShortcutActions) ~= "table" or type(ShortcutActions.reset) ~= "function" then
-        log("Reset shortcuts failed: shortcut_actions.lua is unavailable", true)
-        return false
-    end
-    local reloaded, resetError = ShortcutActions.reset(SHORTCUTS_PATH, {
-        reservedIds = SHORTCUT_RESERVED_IDS,
-    })
-    if reloaded == nil then
-        log("Reset shortcuts failed: " .. tostring(resetError), true)
-        return false
-    end
-    shortcutData = reloaded
-    rebuildFunctionCatalog(shortcutData, state.partyCatalogCapacity)
-    local removed = 0
+local function restoreDefaultAssignments()
+    local defaults = makeDefaultAssignments()
     for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
-        local id = state.assignments[slotIndex]
-        if type(id) ~= "string" or FUNCTION_BY_ID[id] == nil then
-            state.assignments[slotIndex] = "empty"
-            removed = removed + 1
-        end
+        state.assignments[slotIndex] = defaults[slotIndex] or "empty"
     end
-    state.editorShortcutPage = 1
     closeAssignmentPicker()
     setResetConfirmVisible(false)
     refreshEditorRows()
     invalidateWheelPanel()
-    updateShortcutPickerPage()
     saveSettings()
-    log("Custom shortcuts reset to defaults"
-        .. (removed > 0 and ("; " .. tostring(removed) .. " removed slot assignment(s) became Empty") or ""), true)
+    log("All 36 wheel assignments restored to packaged defaults", true)
     return true
 end
 
@@ -3331,7 +3311,7 @@ local function handleEditorClick(direction)
             return
         end
         if pointInRect(x, y, state.editorResetConfirmYesRect) then
-            resetShortcutsToDefaults()
+            restoreDefaultAssignments()
             return
         end
         return
