@@ -1,6 +1,6 @@
 return {
     enabled = true,
-    version = "1.4.3",
+    version = "1.4.4",
 
     screenWidth = 1920,
     screenHeight = 1080,
@@ -49,6 +49,7 @@ return {
     controllerEarlyReturnArmMagnitude = 0.60,
     controllerEarlyReturnFraction = 0.25,
     controllerCancelAnalogThreshold = 0.18,
+    controllerHighlightHapticsEnabled = true,
 
     hideHardwareCursorWhileOpen = true,
     blockPageMouseAim = true,

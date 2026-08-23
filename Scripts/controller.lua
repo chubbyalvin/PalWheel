@@ -323,6 +323,9 @@ function Controller:updateSelection(pc)
         local def = state.selected ~= nil
             and self.o.assignmentDefinitionForVisibleIndex(state.selected) or nil
         self.o.previewAssignmentNatively(def, "controller hover")
+        if state.selected ~= nil and type(self.o.pulseHighlight) == "function" then
+            self.o.pulseHighlight(pc, state.selected)
+        end
         self.o.updateHighlight()
     end
     return magnitude

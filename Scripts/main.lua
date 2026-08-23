@@ -137,6 +137,7 @@ local SAVED_CONFIG_FIELDS = {
     "openKey", "keyboardPageButton", "settingsKey",
     "controllerOpenButton", "controllerPageButton",
     "wheelOuterMarkerLayer", "controllerInvertY", "controllerStickDeadzone",
+    "controllerHighlightHapticsEnabled",
     "slowMotionEnabled", "wheelTimeDilation", "wheelFont", "mouseDeadzone",
     "keyboardMovementKeys", "controllerMovementKeys",
 }
@@ -506,6 +507,8 @@ local state = {
     editorSkinDropdownOpen = false,
     editorSlowMotionText = nil,
     editorSlowMotionRect = nil,
+    editorHapticsText = nil,
+    editorHapticsRect = nil,
     editorSkinDropdownWidgets = {},
     editorSkinOptionRects = {},
     editorPickerOpen = false,
@@ -553,6 +556,7 @@ local state = {
     notificationExpiresAt = 0.0,
 
     visuals = nil,
+    haptics = nil,
     editorBuilder = nil,
     keyboardOpenWasDown = false,
     keyboardOpenHandledAt = 0.0,
@@ -656,6 +660,8 @@ local function saveSettings()
         "    controllerPageButton = " .. string.format("%q", tostring(cfg("controllerPageButton", "Gamepad_RightShoulder"))) .. ",",
         "    controllerInvertY = " .. tostring(cfg("controllerInvertY", true) == true) .. ",",
         "    controllerStickDeadzone = " .. tostring(clamp(cfg("controllerStickDeadzone", 0.25), 0.05, 0.95)) .. ",",
+        "    controllerHighlightHapticsEnabled = "
+            .. tostring(cfg("controllerHighlightHapticsEnabled", true) == true) .. ",",
         "",
         "    slowMotionEnabled = " .. tostring(cfg("slowMotionEnabled", true) == true) .. ",",
         "    wheelTimeDilation = " .. tostring(clamp(cfg("wheelTimeDilation", 0.08), 0.01, 1.0)) .. ",",
@@ -2043,6 +2049,7 @@ local function switchActivePage()
 end
 
 local function destroyWidget()
+    if state.haptics ~= nil then state.haptics:reset(state.pc) end
     if state.controller ~= nil then state.controller:reset() end
     if state.inputRuntime ~= nil then state.inputRuntime:resetSuppression() end
     releaseCameraLock()
@@ -2099,6 +2106,8 @@ local function destroyWidget()
     state.editorSkinDropdownOpen = false
     state.editorSlowMotionText = nil
     state.editorSlowMotionRect = nil
+    state.editorHapticsText = nil
+    state.editorHapticsRect = nil
     state.editorSkinDropdownWidgets = {}
     state.editorSkinOptionRects = {}
     state.editorPickerOpen = false
@@ -2731,6 +2740,13 @@ local function updateEditorSlowMotionText()
     end
 end
 
+local function updateEditorHapticsText()
+    if alive(state.editorHapticsText) then
+        setText(state.editorHapticsText,
+            cfg("controllerHighlightHapticsEnabled", true) == true and "ON" or "OFF")
+    end
+end
+
 local function updateEditorRow(slotIndex)
     local row = state.editorRows[slotIndex]
     if row == nil then return end
@@ -2777,6 +2793,7 @@ local function buildEditorWidget(pc)
                 updateWheelCountText = updateEditorWheelCountText,
                 updateSkinText = updateEditorSkinText,
                 updateSlowMotionText = updateEditorSlowMotionText,
+                updateHapticsText = updateEditorHapticsText,
                 wheelSkins = WHEEL_SKINS,
                 updateRow = updateEditorRow,
                 pageSize = PAGE_SIZE,
@@ -3451,6 +3468,19 @@ local function handleEditorClick(direction)
             .. (config.slowMotionEnabled and "ON" or "OFF"), true)
         return
     end
+    if pointInRect(x, y, state.editorHapticsRect) then
+        config.controllerHighlightHapticsEnabled =
+            cfg("controllerHighlightHapticsEnabled", true) ~= true
+        if config.controllerHighlightHapticsEnabled ~= true
+            and state.haptics ~= nil then
+            state.haptics:stop(state.pc)
+        end
+        updateEditorHapticsText()
+        saveSettings()
+        log("Wheel haptics setting changed to "
+            .. (config.controllerHighlightHapticsEnabled and "ON" or "OFF"), true)
+        return
+    end
     for slotIndex = 1, TOTAL_ASSIGNMENT_SLOTS do
         local row = state.editorRows[slotIndex]
         if row ~= nil and pointInRect(x, y, row.rect) then
@@ -3595,6 +3625,7 @@ local function closeWheel(reason)
     if not state.open then return end
     state.open = false
     state.openKeySawDown = false
+    if state.haptics ~= nil then state.haptics:stop(state.pc) end
     if state.controller ~= nil then state.controller:finish(state.pc) end
     if state.inputRuntime ~= nil then state.inputRuntime:finishKeyboard(state.pc) end
     state.selectionCommitted = false
@@ -3772,6 +3803,19 @@ local function activateSelectedOption(trigger)
     return false
 end
 
+state.haptics = require("controller_haptics").new({
+    cfg = cfg,
+    alive = alive,
+    clamp = clamp,
+    log = log,
+    effectiveTimeDilation = function()
+        if state.slowMotionApplied then
+            return clamp(cfg("wheelTimeDilation", 0.08), 0.01, 1.0)
+        end
+        return 1.0
+    end,
+})
+
 state.controller = require("controller").new({
     cfg = cfg,
     state = state,
@@ -3783,6 +3827,9 @@ state.controller = require("controller").new({
     visibleSlotCount = activeVisibleSlotCount,
     assignmentDefinitionForVisibleIndex = assignmentDefinitionForVisibleIndex,
     previewAssignmentNatively = previewAssignmentNatively,
+    pulseHighlight = function(pc, slot)
+        return state.haptics:pulse(pc, slot)
+    end,
     updateHighlight = updateHighlight,
     updatePointerDirection = function(angle, magnitude, deadzone)
         if state.callVisual ~= nil then

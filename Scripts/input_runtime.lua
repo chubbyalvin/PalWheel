@@ -18,34 +18,57 @@ function InputRuntime.new(options)
     self.suppressionActive = false
     self.releaseGuard = false
     self.suppressionFailureLogged = false
+    self.openGamePending = false
+    self.settingsGamePending = false
+    self.mouseGamePending = false
+    self.pageGamePending = false
+    self.openGameCallback = function()
+        self.openGamePending = false
+        self:handleOpenPressed()
+    end
+    self.settingsGameCallback = function()
+        self.settingsGamePending = false
+        local o = self.options
+        if o.state.open then self:cancel(o.state.settingsKeyName)
+        else o.toggleEditor() end
+    end
+    self.mouseGameCallback = function()
+        self.mouseGamePending = false
+        local o = self.options
+        if o.state.editorOpen then o.handleEditorClick(1)
+        elseif o.state.open then self:cancel(o.state.mouseActivateKeyName) end
+    end
+    self.pageGameCallback = function()
+        self.pageGamePending = false
+        local o = self.options
+        if o.state.editorOpen then o.handleEditorClick(-1)
+        elseif o.state.open and o.cfg("keyboardPageButtonSwitchesPage", true) == true then
+            o.enforcePageAimSuppression()
+            o.switchActivePage()
+        end
+    end
+    self.queueGameCallback = function(pendingField, callback)
+        if self[pendingField] == true then return false end
+        self[pendingField] = true
+        local ok = pcall(ExecuteInGameThread, callback)
+        if not ok then self[pendingField] = false end
+        return ok
+    end
     self.openCallback = function()
-        ExecuteInGameThread(function() self:handleOpenPressed() end)
+        self.queueGameCallback("openGamePending", self.openGameCallback)
     end
     self.settingsCallback = function()
-        ExecuteInGameThread(function()
-            local o = self.options
-            if o.state.open then self:cancel(o.state.settingsKeyName)
-            else o.toggleEditor() end
-        end)
+        self.queueGameCallback("settingsGamePending", self.settingsGameCallback)
     end
     self.mouseCallback = function()
         local o = self.options
         if not o.state.open and not o.state.editorOpen then return end
-        ExecuteInGameThread(function()
-            if o.state.editorOpen then o.handleEditorClick(1)
-            else self:cancel(o.state.mouseActivateKeyName) end
-        end)
+        self.queueGameCallback("mouseGamePending", self.mouseGameCallback)
     end
     self.pageCallback = function()
         local o = self.options
         if not o.state.open and not o.state.editorOpen then return end
-        ExecuteInGameThread(function()
-            if o.state.editorOpen then o.handleEditorClick(-1)
-            elseif o.state.open and o.cfg("keyboardPageButtonSwitchesPage", true) == true then
-                o.enforcePageAimSuppression()
-                o.switchActivePage()
-            end
-        end)
+        self.queueGameCallback("pageGamePending", self.pageGameCallback)
     end
     self.restartGameCallback = function()
         local o, s = self.options, self.options.state

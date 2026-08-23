@@ -129,11 +129,18 @@ function Builder:start(pc)
     o.updateSlowMotionText()
     o.createText(state.tree, editorPanel,
         "Always disabled in multiplayer.",
-        1095, 195, 220, 24, 10)
+        835, 232, 245, 24, 10)
+
+    o.createText(state.tree, editorPanel, "WHEEL HAPTICS", 1095, 195, 150, 30, 14)
+    local hapticsBorder
+    hapticsBorder, state.editorHapticsText = self:cell(
+        1260, 188, 90, 42, o.colors.button, "", 14, 16)
+    state.editorHapticsRect = { x = 1260, y = 188, w = 90, h = 42 }
+    if type(o.updateHapticsText) == "function" then o.updateHapticsText() end
 
     local resetBorder, resetText = self:cell(
-        1330, 188, 240, 42, o.colors.button, "RESTORE DEFAULTS", 40, 13)
-    state.editorResetShortcutsRect = { x = 1330, y = 188, w = 240, h = 42 }
+        1380, 188, 240, 42, o.colors.button, "RESTORE DEFAULTS", 40, 13)
+    state.editorResetShortcutsRect = { x = 1380, y = 188, w = 240, h = 42 }
     state.editorResetShortcutsText = resetText
 
     local columnX = { 180, 700, 1220 }
@@ -383,15 +390,15 @@ function Builder:finish()
     local confirmPanel = o.construct("/Script/UMG.Border", state.tree)
     local confirmSlot = confirmPanel and o.addToCanvas(self.root, confirmPanel) or nil
     if confirmSlot ~= nil then
-        o.place(confirmSlot, 625, 365, 670, 260)
+        o.place(confirmSlot, 465, 365, 990, 260)
         o.setBorderColor(confirmPanel, o.colors.panel)
     end
-    local confirmOutline = self:outline(625, 365, 670, 260, 2)
+    local confirmOutline = self:outline(465, 365, 990, 260, 2)
     local confirmTitle = o.createText(state.tree, self.root, "RESTORE DEFAULT ASSIGNMENTS?",
-        665, 395, 590, 36, 18)
+        515, 395, 890, 36, 18)
     local confirmBody = o.createText(state.tree, self.root,
         "Restore all 36 wheel slots to PalWheel's packaged default layout?\nWheel count, visible slot counts, controls, and custom shortcut definitions will not change.",
-        665, 445, 590, 72, 13)
+        515, 445, 890, 72, 13)
     local yesBorder, yesText = self:cell(760, 545, 180, 44, o.colors.button, "RESTORE", 42, 14)
     local noBorder, noText = self:cell(980, 545, 180, 44, o.colors.row, "CANCEL", 48, 14)
     state.editorResetConfirmWidgets = { confirmPanel, confirmTitle, confirmBody, yesBorder, yesText, noBorder, noText }
