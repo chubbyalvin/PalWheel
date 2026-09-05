@@ -1,40 +1,125 @@
 # PalWheel
 
-**PalWheel** is a customizable radial action wheel for **Palworld** built with **UE4SS**.
+**PalWheel** is a customizable quick-action wheel for **Palworld**, built for **UE4SS**.
 
-It gives quick access to frequently used actions through **up to three configurable wheels**, with **36 saved assignment positions total** and **4 to 12 visible slots per wheel**. PalWheel is designed primarily for controller use, while still supporting keyboard and mouse.
+Its purpose is simple: put frequently used Palworld actions within quick reach without digging through multiple menus or remembering a long list of hotkeys.
 
-> **Current version:** 1.4  
+With PalWheel, you can place **Pals, weapons, Palworld menus, Pal actions, emotes, and Custom Shortcuts** on configurable radial wheels, use AUX shortcuts directly with controller buttons or the mouse, and switch spheres through a separate Sphere Wheel.
+
+> **Current version:** 2.0  
 > **Author:** CHUBBYALVIN  
 > **Platform:** Palworld for Windows  
 > **Framework:** UE4SS
 
 ---
 
-## Features
+## Video Guide
 
-- **1, 2, or 3 configurable radial wheels**
-- **36 customizable assignment positions total** — 12 per wheel
-- Independently configure **4–12 visible slots per wheel**
-- Controller and keyboard/mouse support
-- Hybrid input support — a wheel opened from keyboard/Steam Input can also be navigated with the controller Right Stick
-- In-game **F7 assignment editor**
-- Automatic saving of user settings and assignments
-- Configurable wheel skins
-- Configurable controls, stick deadzones, movement allowlists and slow-motion behavior
-- In-game **Slow Motion toggle**
-- Automatic multiplayer detection; slow motion is disabled in multiplayer
-- Improved controller input handling and camera stability when slow motion is unavailable
-- Weapon, Pal and sphere hover/selection previews
-- Input and camera handling while the wheel is open
-- **Assignable vanilla Palworld emotes**
-- **Configurable custom keyboard shortcut actions** for Palworld and other mods
-- **Automatic expanded-party support** — dynamically shows Pal 6+ when the local party capacity is increased by a compatible mod
-- Separate user-generated settings, assignment and shortcut files
+<p align="center">
+  <a href="https://youtu.be/j-6TWQMeKnc">
+    <img src="https://img.youtube.com/vi/j-6TWQMeKnc/maxresdefault.jpg"
+         alt="PalWheel v2.0 Video Guide"
+         width="800">
+  </a>
+</p>
 
-### Assignable actions
+<p align="center">
+  <b><a href="https://youtu.be/j-6TWQMeKnc">Watch the PalWheel v2.0 Video Guide</a></b>
+</p>
 
-#### Weapons
+---
+
+## What PalWheel Does
+
+### Configurable Main Wheels
+
+PalWheel supports up to **three Main Wheels**.
+
+Each Main Wheel has **12 saved assignment positions** and can display **4 to 12 visible slots**, giving you up to **36 saved Main Wheel assignments**.
+
+Main Wheel slots can be assigned to:
+
+- Party Pals
+- Weapons
+- Palworld menus
+- Pal actions
+- Emotes
+- Mercy Toggle
+- Custom Shortcuts
+- Empty slots
+
+You can keep one compact wheel for your most-used actions or spread different functions across two or three wheels.
+
+### AUX Shortcuts
+
+Whenever the Main Wheel is open, PalWheel also shows two direct shortcut groups:
+
+- **AUX I** — D-pad
+- **AUX II** — Face buttons
+
+Each AUX group has **4 assignable shortcuts**.
+
+AUX slots do not require Main Wheel radial selection. You can activate them directly with their assigned D-pad or face button, or click an AUX slot with the mouse. This works regardless of whether the Main Wheel was opened from controller or keyboard/mouse.
+
+### Separate Sphere Wheel
+
+Spheres use their own dedicated **Sphere Wheel** instead of taking Main Wheel assignment space.
+
+The Sphere Wheel:
+
+- Supports **5 to 10 visible sphere slots**
+- Uses your configured sphere order
+- Checks whether each sphere is currently available
+- Prevents unavailable spheres from being selected
+- Works with normal sphere throwing and supported Sphere Launchers
+
+### In-Game Assignment and Settings Menu
+
+Press **F7** by default to open the PalWheel Menu.
+
+From there you can configure:
+
+- Main Wheel assignments
+- AUX assignments
+- Sphere order
+- Number of active Main Wheels
+- Visible slot count for each Main Wheel
+- Sphere Wheel slot count
+- PalWheel controls
+- Custom Shortcuts
+- Wheel skin
+- Additional PalWheel options
+
+Changes remain in draft until **SAVE & APPLY** is selected.
+
+### Custom Shortcuts
+
+PalWheel can turn wheel slots into configurable keyboard shortcuts.
+
+This lets you put:
+
+- Palworld keyboard actions
+- Hotkeys from other Palworld mods
+- Your own commonly used shortcuts
+
+directly on a PalWheel slot.
+
+The first **36 valid active Custom Shortcuts** are available in the assignment picker.
+
+### Expanded Party Support
+
+PalWheel reads the party capacity reported by Palworld.
+
+If another compatible mod increases the local party capacity, PalWheel can expose matching additional Pal slots such as **Pal 6, Pal 7, and beyond**.
+
+Assignments to those extra Pal slots remain saved if the additional capacity is temporarily unavailable.
+
+---
+
+## Assignable Actions
+
+### Weapons
+
 - Weapon 1
 - Weapon 2
 - Weapon 3
@@ -42,37 +127,39 @@ It gives quick access to frequently used actions through **up to three configura
 - Weapon 5
 - Weapon 6
 
-#### Party Pals
-- Pal 1 through Pal 5 on a standard Palworld party
-- When another mod expands the local party capacity, PalWheel automatically exposes matching additional Pal slots (Pal 6, Pal 7, and so on)
-- Expanded-party assignments remain saved if the extra capacity is later unavailable and become usable again when that capacity returns
+### Party Pals
 
-#### Game Menus
-- Character
+- Pal 1 through Pal 5 in a standard party
+- Additional Pal slots when Palworld reports a larger party capacity
+
+### Palworld Menus
+
 - Inventory
-- World Map
-- Technology
 - Party
+- Technology
+- Mission
+- Palpedia
+- Guild
+- Options
 - Build
+- World Map
 
-#### Custom Shortcuts
-- User-defined keyboard shortcut actions from `Saved\shortcuts.tsv`
-- Supports single keys and Ctrl / Shift / Alt combinations
-- Up to 36 active/selectable custom shortcut definitions at a time
+These use Palworld's native menu actions and corresponding in-game terminology.
 
-#### Pal Spheres
-- Pal Sphere
-- Mega Sphere
-- Giga Sphere
-- Hyper Sphere
-- Ultra Sphere
-- Legendary Sphere
-- Ultimate Sphere
-- Exotic Sphere
-- Sol Sphere
-- Ancient Sphere
+### Pal Actions
 
-#### Emotes
+- Feed Pal
+- Pet Pal
+- Photo Mode
+- Pal Command — Peaceful
+- Pal Command — Defensive
+- Pal Command — Aggressive
+
+
+### Emotes
+
+PalWheel supports assignable vanilla Palworld emotes, including:
+
 - Beckon
 - Dance
 - Wave
@@ -83,358 +170,473 @@ It gives quick access to frequently used actions through **up to three configura
 - Sleep
 - Kick
 
-#### Utility
-- Mercy accessory toggle
+### Mercy Toggle
 
-#### General
-- Empty slot
+Mercy Toggle can equip or remove a supported mercy accessory when available:
+
+- Ring of Mercy
+- Pal Tamer's Glasses
+
+Inventory space is required when removing an equipped accessory.
+
+### Custom Shortcuts
+
+Custom Shortcuts can trigger configurable keyboard keys with supported Ctrl / Shift / Alt modifiers.
+
+The in-game shortcut picker lets you choose **one optional modifier at a time**:
+
+- None
+- Ctrl
+- Shift
+- Alt
+
+Valid existing `shortcuts.tsv` entries that use supported multi-modifier combinations can still be loaded and used.
 
 ---
 
-## Default Controls
+## Main Wheel Controls
 
 ### Controller
 
 | Input | Action |
 |---|---|
-| Hold **L1 / LB** | Open PalWheel |
-| **Right Stick** | Highlight a slot |
-| Return Right Stick inward | Activate after the configured inward-return threshold |
-| Release **L1 / LB** | Activate the highlighted slot |
-| **R1 / RB** | Switch between enabled wheels |
+| Hold **L1 / LB** | Open Main Wheel |
+| **Right Stick** | Select a slot |
+| Release **L1 / LB** | Activate the selected slot |
+| Return Right Stick inward after selecting | Activate the selected slot |
+| **R1 / RB** | Next Main Wheel |
+| **R3 / RS** while Main Wheel is open | Open PalWheel Menu |
+| **L2 / LT** and **R2 / RT** while Main Wheel is open | Camera Zoom when enabled |
 
-When multiple wheels are enabled, the page button cycles through them:
-
-- 1 wheel: Wheel I
-- 2 wheels: Wheel I → Wheel II
-- 3 wheels: Wheel I → Wheel II → Wheel III
-
-### Recommended Palworld controller remap
-
-PalWheel uses **L1 / LB** as its default controller open button. To avoid a conflict with Palworld's default summon control, the recommended Palworld controller remap is:
-
-1. Remap **Summon Pal** from **L1 / LB** to **D-pad Left**.
-2. Remap **Select Previous/Left Pal** from **D-pad Left** to **D-pad Right**, the same button used for **Select Next/Right Pal**.
-3. Palworld will show a **duplicate key binding warning** for the two Pal-selection actions. This is expected.
-
-This keeps Pal summoning available on D-pad Left while freeing L1 / LB for PalWheel.
+If multiple Main Wheels are active, **R1 / RB** cycles through them.
 
 ### Keyboard / Mouse
 
 | Input | Action |
 |---|---|
-| Hold **Caps Lock** | Open PalWheel |
-| Mouse movement | Highlight a slot |
-| Release **Caps Lock** | Activate the highlighted slot |
-| **Right Mouse Button** | Switch between enabled wheels |
-| **F7** | Open or close the assignment editor |
+| Hold **Caps Lock** | Open Main Wheel |
+| Mouse movement | Select a slot |
+| **Left Click** | Activate the selected slot |
+| **Middle Mouse** | Next Main Wheel |
+| **F7** | Open or close PalWheel Menu |
 
-### Custom trigger keys
+On keyboard/mouse, releasing **Open Wheel** closes the wheel without activating an action.
 
-For personal key bindings, first launch Palworld and enter a world once after installing PalWheel. This generates:
+---
+
+## AUX Controls
+
+AUX shortcuts are available whenever the Main Wheel is open.
+
+### AUX I — D-pad
+
+| Slot | Input |
+|---|---|
+| 1 | D-pad Left |
+| 2 | D-pad Up |
+| 3 | D-pad Right |
+| 4 | D-pad Down |
+
+### AUX II — Face Buttons
+
+| Slot | Input |
+|---|---|
+| 1 | Face Left / Square / X |
+| 2 | Face Top / Triangle / Y |
+| 3 | Face Right / Circle / B |
+| 4 | Face Bottom / Cross / A |
+
+You can also click any visible AUX slot directly with the mouse.
+
+AUX assignments are configured from the PalWheel Menu.
+
+---
+
+## Sphere Wheel
+
+The Sphere Wheel is separate from the Main Wheels.
+
+### Normal Sphere Throw
+
+1. Hold Palworld's sphere-throw control.
+2. Press or hold **Open Wheel**.
+
+### Sphere Launcher
+
+1. Equip and aim a supported Sphere Launcher.
+2. Press or hold **Open Wheel** while still aiming.
+
+Use the radial selector to choose a sphere.
+
+Unavailable sphere slots are visibly marked and cannot be selected.
+
+Sphere order and the number of visible Sphere Wheel slots can be changed from the PalWheel Menu.
+
+---
+
+## PalWheel Menu
+
+Press **F7** by default to open the PalWheel Menu.
+
+### Controller Navigation
+
+| Input | Action |
+|---|---|
+| D-pad or Left Stick | Move between controls |
+| Cross / A | Select |
+| Circle / B | Back |
+| Triangle / Y | Save / Apply when available |
+
+The menu provides access to:
+
+- Main Wheel assignments
+- AUX assignments
+- Sphere Wheel order
+- Main Wheel count
+- Main Wheel slot counts
+- Sphere Wheel slot count
+- PalWheel Controls
+- Custom Shortcuts
+- Wheel skin
+- Slow Motion
+- Controller Zoom
+- Haptics
+- Sphere Follow Target
+- Instructions
+- Restore Defaults
+
+Changes remain in draft until **SAVE & APPLY** is selected.
+
+### Restore Defaults
+
+**RESTORE DEFAULTS** loads the packaged PalWheel defaults into the current draft.
+
+It resets:
+
+- 36 Main Wheel assignments
+- 8 AUX assignments
+- 10 Sphere assignments
+- Main Wheel count
+- Main Wheel slot counts
+- Sphere Wheel slot count
+- Wheel skin
+- Slow Motion
+- Controller Zoom
+- Haptics
+- Follow Target
+
+It does **not** reset PalWheel Controls or Custom Shortcuts.
+
+If the menu is closed with unsaved changes, PalWheel asks whether to discard them.
+
+---
+
+## Changing PalWheel Controls
+
+Open:
+
+**PalWheel Menu → CONTROLS**
+
+You can change:
+
+- Open Wheel
+- Next Wheel
+- Keyboard/mouse PalWheel Menu
+- Controller PalWheel Menu
+- Open Wheel behavior: Hold or Toggle
+
+Select **CHANGE**, choose the new binding, then **CONFIRM**.
+
+Changes remain in draft until **SAVE & APPLY** is selected.
+
+The keyboard Open Wheel, Next Wheel, and PalWheel Menu bindings must be different from each other.
+
+The three controller PalWheel bindings must also be different.
+
+PalWheel warns when some controller choices overlap with AUX, Zoom, or detected Palworld controls.
+
+**RESTORE DEFAULT CONTROLS** restores the packaged keyboard/controller bindings and changes Open Wheel behavior back to **Hold**.
+
+---
+
+## Controller Binding Note
+
+The default PalWheel controller Open Wheel input is **L1 / LB**.
+
+If that button is still assigned to a conflicting Palworld action, either:
+
+- Move the conflicting Palworld action to another control, or
+- Change PalWheel's Open Wheel binding under **PalWheel Menu → CONTROLS**
+
+An optional controller-binding preset is included under:
 
 ```text
-PalWheel\Saved\settings.lua
+Optional\PalWheel_Controller_Binding_Preset\
 ```
 
-Close the game before editing this file.
+Review the included README before using the preset.
 
-The generated `settings.lua` contains the user-facing trigger bindings, including:
+> **Preset note:** The included `UserOption.sav` preset is intended for the **Steam** version of Palworld. Microsoft Store / PC Game Pass users should configure conflicting controller bindings manually rather than copying this preset into WGS storage.
 
-```lua
-controllerOpenButton = "Gamepad_LeftShoulder",
-controllerPageButton = "Gamepad_RightShoulder",
+---
 
-openKey = "CAPS_LOCK",
-keyboardPageButton = "RIGHT_MOUSE_BUTTON",
-```
+## Custom Shortcuts
 
-Change these values in `Saved\settings.lua` if you prefer a different controller or keyboard/mouse layout.
+Open:
 
-### Custom shortcut actions
+**PalWheel Menu → SHORTCUTS**
 
-PalWheel also generates:
+You can:
+
+- Add a shortcut
+- Duplicate a shortcut
+- Edit its Label
+- Edit its ID
+- Choose a key
+- Choose one optional Ctrl, Shift, or Alt modifier
+- Enable or disable it
+- Delete it
+- Reload `shortcuts.tsv`
+- Restore the packaged shortcut rows into the draft
+
+Only active valid shortcuts appear in the assignment picker.
+
+The first **36 valid active shortcuts** are selectable.
+
+Shortcut IDs must be unique.
+
+Labels can contain up to **20 characters**.
+
+An unmodified Custom Shortcut cannot use a key that is currently assigned to PalWheel's Open Wheel, Next Wheel, or PalWheel Menu controls. Adding Ctrl, Shift, or Alt makes it a distinct shortcut where supported.
+
+Renaming a shortcut keeps wheel slots connected to it.
+
+Deleting a shortcut changes slots using it to Empty after **SAVE & APPLY**.
+
+### Advanced External Editing
+
+Most users should use the in-game shortcut editor.
+
+For advanced editing, PalWheel also uses:
 
 ```text
 PalWheel\Saved\shortcuts.tsv
 ```
 
-This TAB-separated file defines keyboard shortcut actions that can be assigned to wheel slots, including shortcuts used by other mods. The default Character, Inventory, Party, Technology and Build actions are also defined here.
+Close Palworld before editing it externally.
 
-Each row contains a stable ID, display label, key, Ctrl / Shift / Alt options, and an `active` setting. The first 36 valid active shortcuts are available in the assignment picker. Existing assignments to an inactive shortcut are preserved but do not execute until that shortcut is enabled again.
+Keep the file in UTF-8 tab-separated format.
 
-Restart Palworld after manually editing `shortcuts.tsv`. Modifier keys are injected as real keypresses, so a modifier that is also bound to a Palworld gameplay action may trigger that action as well. Windows-key shortcuts and unsafe system combinations are not supported.
+After editing, either restart Palworld or use:
 
----
+**PalWheel Menu → SHORTCUTS → RELOAD FILE**
 
-## Assignment Editor
+Do not manually edit `settings.lua`.
 
-Press **F7** in-game to open the assignment editor.
-
-The editor displays **Wheel I, Wheel II and Wheel III** side by side and lets you:
-
-- Assign functions to all **36 saved assignment positions**
-- Choose from grouped categories including Weapons, Party, Spheres, Emotes, PalWheel and Custom Shortcuts
-- Automatically page the Party picker when more than 10 Pal slots are available
-- Select whether **1, 2, or 3 wheels** are active
-- Independently configure **4–12 visible slots for each wheel**
-- Select an installed wheel skin
-- Enable or disable **Slow Motion**
-- Reset custom shortcut definitions to their defaults with confirmation
-- Automatically save assignments and settings
-
-All three wheel columns remain available in the editor even when fewer than three wheels are enabled, allowing additional wheels to be configured before enabling them.
-
-> **Multiplayer:** Slow Motion is automatically disabled when PalWheel detects multiplayer, regardless of this setting.
-
-The editor uses direct mouse clicks for assignment changes.
+Normal settings, controls, and assignments should be changed through the PalWheel Menu. If `settings.lua` becomes damaged, back it up or rename it and let PalWheel create fresh defaults.
 
 ---
 
-## Wheel Behavior
+## Additional Options
 
-While PalWheel is open:
+These settings support the core PalWheel experience but are not required to use its quick-action features.
 
-- Mouse direction or Right Stick direction selects a slot around the wheel.
-- A keyboard-opened wheel can also be navigated with the controller Right Stick; mouse movement can take selection ownership again.
-- The configured page button cycles between the currently enabled wheels.
-- The camera is clamped while the wheel is active.
-- Slow Motion can be enabled or disabled from the assignment editor.
-- When multiplayer is detected, PalWheel automatically disables slow motion regardless of the saved setting.
-- Allowed movement inputs can remain active.
-- On controller, most other buttons close PalWheel and continue to their normal game action.
-- Weapon, Pal and sphere slots can preview their selection when highlighted.
-- Pal actions select the corresponding party slot and summon the Pal near the player. PalWheel reads the local party holder's reported maximum capacity, so compatible expanded-party mods can expose Pal 6 and above automatically.
-- Sphere actions check inventory and attempt to equip the selected sphere type.
-- Emote actions directly trigger the assigned vanilla Palworld emote.
-- The World Map uses a native UI call.
-- Configurable shortcut actions use deferred keyboard input through `PalworldKeyInjector.dll`.
-- Closing the wheel restores cursor, input, camera and time state.
+### Slow Motion
 
-PalWheel only opens during normal playable world state and stays closed while blocking Palworld UI is active.
+Slow Motion can reduce game speed while a PalWheel wheel is open, including the Main Wheel or Sphere Wheel.
+
+It is automatically disabled when PalWheel detects multiplayer.
+
+### Controller Zoom
+
+When enabled, controller Camera Zoom lets you adjust camera distance while the Main Wheel is open.
+
+Zoom changes apply to the current session.
+
+### Haptics
+
+Controller highlight haptics can provide a short vibration when the selected radial slot changes.
+
+### Sphere Follow Target
+
+Sphere Wheel Follow Target can be enabled or disabled for controller use.
+
+### Wheel Skins
+
+PalWheel scans `Assets` for wheel skins using names such as:
+
+```text
+wheel_01.png
+wheel_02.png
+```
+
+Included skins:
+
+- `wheel_01.png`
+- `wheel_02.png`
+
+---
+
+## Localization
+
+PalWheel includes localization for the supported Palworld languages packaged with the mod.
+
+Custom Shortcut labels and IDs remain user-defined and are not automatically translated.
 
 ---
 
 ## Installation
 
-### Manual / GitHub Release
+### Requirements
 
-1. Install a working **UE4SS build for Palworld**.
-2. Download the latest PalWheel release archive.
-3. Extract the `PalWheel` folder into:
+- Palworld for Windows
+- A working UE4SS installation for Palworld
+
+### Manual / GitHub Release Installation
+
+1. Close Palworld.
+2. Install UE4SS for Palworld.
+3. Download the latest PalWheel release ZIP.
+4. Extract the included `PalWheel` folder into your UE4SS `Mods` folder.
+
+Common UE4SS locations include:
 
 ```text
 Palworld\Pal\Binaries\Win64\ue4ss\Mods\
 ```
 
-or
+or:
 
 ```text
 Palworld\Mods\NativeMods\UE4SS\Mods\
 ```
 
-4. Confirm the final structure includes:
+The final installed structure should contain:
 
 ```text
 PalWheel\
 ├─ Assets\
+├─ Optional\
 ├─ Saved\
-└─ Scripts\
-   └─ main.lua
+├─ Scripts\
+├─ THIRD_PARTY_LICENSES\
+├─ LICENSE.md
+└─ enabled.txt
 ```
 
-5. Start Palworld and enter a world.
+5. Launch Palworld and enter a world.
 
-PalWheel automatically creates:
+PalWheel creates its user files under:
 
 ```text
-PalWheel\Saved\settings.lua
-PalWheel\Saved\assignments.lua
-PalWheel\Saved\shortcuts.tsv
+PalWheel\Saved\
 ```
 
-Close the game before manually editing generated settings files.
+including:
+
+```text
+settings.lua
+shortcuts.tsv
+```
 
 ---
 
-## Configuration
+## Updating PalWheel
 
-PalWheel uses two kinds of configuration:
+1. Close Palworld.
+2. Back up `PalWheel\Saved` if desired.
+3. Preserve your generated `Saved\settings.lua` and `Saved\shortcuts.tsv` if you want to keep your current settings and Custom Shortcuts.
+4. Replace the existing PalWheel mod files with the files from the new release.
+5. Launch Palworld.
 
-### Packaged defaults
+Do not copy old Scripts or localization files back over a newer release.
 
-```text
-Scripts\config.lua
-Scripts\mappings.lua
-```
-
-These define default appearance, timing, controls, input mappings and behavior.
-
-### Generated user files
-
-```text
-Saved\settings.lua
-Saved\assignments.lua
-Saved\shortcuts.tsv
-```
-
-`settings.lua` stores user-facing preferences and controls, including the number of enabled wheels and the visible slot count for each wheel.
-
-`assignments.lua` stores the **36 assignment IDs** used by Wheel I, Wheel II and Wheel III.
-
-`shortcuts.tsv` stores configurable keyboard shortcut actions. The first 36 valid active definitions are selectable, while inactive definitions can remain assigned without executing until re-enabled.
-
-The generated files are written separately so updates to the mod do not need to overwrite user choices.
-
-Existing settings and assignments are migrated when required by newer PalWheel settings formats.
-
----
-
-## Wheel Skins
-
-PalWheel scans the mod's `Assets` folder for wheel skin files using names in the form:
-
-```text
-wheel_00.png
-wheel_01.png
-wheel_02.png
-...
-wheel_99.png
-```
-
-Included skins:
-
-- `wheel_01.png` — plain wheel skin
-- `wheel_02.png` — detailed default wheel skin
-
-Additional compatible skins can be added later without changing the core wheel logic.
+> **Older-version note:** PalWheel v2.0 stores Main Wheel, AUX, and Sphere assignments in `Saved\settings.lua`. A legacy `Saved\assignments.lua` from older PalWheel versions is no longer used by v2.0 and can be removed.
 
 ---
 
 ## Repository Structure
 
+The GitHub repository intentionally does **not** need `enabled.txt`; that file is included in the packaged manual release.
+
 ```text
-PalWheel\
-├─ Assets\
-│  ├─ wheel_01.png
-│  └─ wheel_02.png
-│
-├─ Saved\
-│  └─ README.txt
-│
-├─ Scripts\
-│  ├─ PalworldKeyInjector.dll
-│  ├─ config.lua
-│  ├─ controller.lua
-│  ├─ editor_builder.lua
-│  ├─ input_runtime.lua
-│  ├─ main.lua
-│  ├─ mappings.lua
-│  ├─ menu_actions.lua
-│  ├─ pal_actions.lua
-│  ├─ palworld_keyinjector.lua
-│  ├─ runtime_loops.lua
-│  ├─ shortcut_actions.lua
-│  ├─ sphere_actions.lua
-│  └─ wheel_visuals.lua
-│
-├─ THIRD_PARTY_LICENSES\
-│  └─ PalworldKeyInjector-MIT.txt
-│
-├─ LICENSE.md
-└─ README.md
+Assets\
+Optional\
+Saved\
+Scripts\
+├─ Localization\
+├─ PalworldKeyInjector.dll
+├─ main.lua
+├─ config.lua
+├─ mappings.lua
+└─ supporting PalWheel modules
+THIRD_PARTY_LICENSES\
+LICENSE.md
+README.md
 ```
 
-### Main Files
-
-| File | Purpose |
-|---|---|
-| `main.lua` | Core state, saved data, action catalogue, UMG construction, UI guards and wheel/editor lifecycle |
-| `config.lua` | Packaged defaults for layout, appearance, timing and features |
-| `mappings.lua` | Default keyboard, mouse and controller mappings |
-| `controller.lua` | Controller session handling, radial selection, wheel switching and close-on-button behavior |
-| `input_runtime.lua` | Keyboard/mouse polling, release activation and wheel-session handling |
-| `editor_builder.lua` | F7 editor, assignment rows, grouped function picker and dropdowns |
-| `wheel_visuals.lua` | Wheel centre details, direction visuals, selection styling and reveal behavior |
-| `menu_actions.lua` | Deferred configurable shortcut actions and PalworldKeyInjector integration |
-| `pal_actions.lua` | Party lookup, Pal selection and summoning |
-| `sphere_actions.lua` | Sphere ownership checks, cycling and verification |
-| `runtime_loops.lua` | Recurring selection, input and camera update loops |
-| `shortcut_actions.lua` | Generation, loading, validation and reset handling for `Saved\shortcuts.tsv` |
-| `palworld_keyinjector.lua` | Lua wrapper for the PalworldKeyInjector API |
-| `PalworldKeyInjector.dll` | Windows x64 helper used by configurable deferred keyboard shortcut actions |
+The final release archive contains the complete installable `PalWheel` folder.
 
 ---
 
 ## Troubleshooting
 
-### PalWheel does not open
+### PalWheel Does Not Load
 
 - Confirm UE4SS is installed and working.
-- Confirm `PalWheel\Scripts\main.lua` is in the expected location.
-- Check the UE4SS log for entries beginning with:
+- Confirm `PalWheel\Scripts\main.lua` exists.
+- Check the UE4SS log for lines beginning with:
 
 ```text
 [PalWheel]
 ```
 
-### Custom PalWheel trigger binding does not take effect
+### Open Wheel Conflicts With a Palworld Controller Action
 
-Personal PalWheel trigger bindings should be changed in:
+Remove the conflicting Palworld binding or choose another PalWheel Open Wheel control under:
+
+**PalWheel Menu → CONTROLS**
+
+### Custom Shortcut Does Not Appear
+
+Confirm that:
+
+- The shortcut is valid
+- It is active
+- Its ID is unique
+- It is within the first 36 valid active definitions
+
+If `shortcuts.tsv` was edited externally, use **RELOAD FILE** or restart Palworld.
+
+### Additional Party Pal Is Unavailable
+
+The slot is available only when Palworld reports the required party capacity.
+
+The assignment remains saved while that capacity is unavailable.
+
+### Mercy Toggle Does Not Work
+
+Confirm that a supported mercy accessory is available:
+
+- Ring of Mercy
+- Pal Tamer's Glasses
+
+You also need inventory space when removing an equipped accessory.
+
+### Damaged Settings
+
+If damaged settings prevent PalWheel from working:
+
+1. Close Palworld.
+2. Back up or rename:
 
 ```text
 PalWheel\Saved\settings.lua
 ```
 
-Close Palworld before editing the file.
+3. Restart the game.
 
-`Scripts\mappings.lua` contains the packaged defaults. Values already saved in `Saved\settings.lua` take priority over those defaults.
-
-### Menu actions do not match remapped Palworld controls
-
-Character, Inventory, Party, Technology and Build use configurable keyboard shortcut definitions. Update the relevant key in:
-
-```text
-PalWheel\Saved\shortcuts.tsv
-```
-
-if those Palworld controls have been remapped, then restart Palworld.
-
-### Custom shortcut does not appear in the assignment picker
-
-Check `PalWheel\Saved\shortcuts.tsv` and confirm the row is valid and `active` is set to `true`. Only the first 36 valid active shortcut definitions are selectable. Invalid rows are reported in the UE4SS log.
-
-### Remapped movement keys cause the wheel to close
-
-Update the movement allowlist in the mappings/configuration so it matches your Palworld controls.
-
-### Controller stick drift selects slots
-
-Increase the configured controller stick deadzone slightly.
-
-### Background skin does not load
-
-Confirm the selected `wheel_XX.png` file exists inside:
-
-```text
-PalWheel\Assets\
-```
-
-and that the skin name matches the saved setting.
-
----
-
-## Planned / Possible Future Updates
-
-Ideas being explored for future versions include:
-
-- Adding icons to wheel slots
-- Supporting additional Palworld menus and actions where technically possible
-- Expanding utility actions
-- Additional wheel skins and visual customization
-- Further controller and input refinements
-
-These are **planned goals and experiments**, not guaranteed features or release dates.
+PalWheel will create fresh defaults.
 
 ---
 
@@ -442,8 +644,10 @@ These are **planned goals and experiments**, not guaranteed features or release 
 
 - Palworld for Windows
 - UE4SS for Palworld
-- Designed for both controller and keyboard/mouse
-- PalWheel is an unofficial community mod and is not affiliated with Pocketpair.
+- Controller and keyboard/mouse support
+- Automatic expanded-party support where Palworld reports a larger local party capacity
+
+PalWheel is an unofficial community mod and is not affiliated with Pocketpair.
 
 Game updates or UE4SS changes may affect compatibility.
 
@@ -451,7 +655,9 @@ Game updates or UE4SS changes may affect compatibility.
 
 ## Permissions and License
 
-PalWheel is currently **not open source under a permissive license**.
+PalWheel is distributed under an **All Rights Reserved** license.
+
+Source availability does not grant permission to copy, redistribute, publish modified versions, or create derivative works.
 
 Copyright © 2026 **CHUBBYALVIN**. All Rights Reserved.
 
@@ -462,7 +668,7 @@ Unless you have prior written permission from CHUBBYALVIN, you may not:
 - Redistribute or reupload PalWheel
 - Publish modified versions
 - Repackage the mod for another distribution
-- Incorporate PalWheel source code, scripts or assets into another project
+- Incorporate PalWheel source code, scripts, or assets into another project
 - Sell or commercially redistribute the mod
 - Claim authorship of PalWheel or substantial portions of it
 
@@ -474,7 +680,9 @@ See [`LICENSE.md`](LICENSE.md) for the full terms.
 
 Use game modifications at your own risk.
 
-Back up important saves and configuration files before installing or updating mods. PalWheel is provided as-is without warranty, and the author is not responsible for loss or damage resulting from its use.
+Back up important saves and configuration files before installing or updating mods.
+
+PalWheel is provided as-is without warranty, and the author is not responsible for loss or damage resulting from its use.
 
 ---
 
