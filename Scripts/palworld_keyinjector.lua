@@ -2,6 +2,9 @@ local Module = {}
 local Client = {}
 Client.__index = Client
 
+local L = require("localization")
+local function T(key, variables) return L.get(key, variables) end
+
 local KEYS = {}
 for code = string.byte("A"), string.byte("Z") do
     local name = string.char(code)
@@ -90,16 +93,16 @@ local function normalize_key(value)
 end
 
 local function blocked_combination(key, ctrl, shift, alt)
-    if alt and key == "F4" then return "ALT+F4 is blocked" end
-    if alt and key == "TAB" then return "ALT+TAB is blocked" end
-    if alt and key == "ESCAPE" then return "ALT+ESCAPE is blocked" end
-    if alt and key == "SPACE" then return "ALT+SPACE is blocked" end
+    if alt and key == "F4" then return T("shortcutBlocked", { binding = "ALT+F4" }) end
+    if alt and key == "TAB" then return T("shortcutBlocked", { binding = "ALT+TAB" }) end
+    if alt and key == "ESCAPE" then return T("shortcutBlocked", { binding = "ALT+ESCAPE" }) end
+    if alt and key == "SPACE" then return T("shortcutBlocked", { binding = "ALT+SPACE" }) end
     if ctrl and shift and key == "ESCAPE" then
-        return "CTRL+SHIFT+ESCAPE is blocked"
+        return T("shortcutBlocked", { binding = "CTRL+SHIFT+ESCAPE" })
     end
-    if ctrl and key == "ESCAPE" then return "CTRL+ESCAPE is blocked" end
+    if ctrl and key == "ESCAPE" then return T("shortcutBlocked", { binding = "CTRL+ESCAPE" }) end
     if ctrl and alt and key == "DELETE" then
-        return "CTRL+ALT+DELETE is blocked"
+        return T("shortcutBlocked", { binding = "CTRL+ALT+DELETE" })
     end
     return nil
 end
@@ -107,7 +110,7 @@ end
 local function parse_specification(specification)
     local text = string.upper(tostring(specification or ""))
     text = text:gsub("%s+", "")
-    if text == "" then return nil, "shortcut is empty" end
+    if text == "" then return nil, T("shortcutEmpty") end
 
     local ctrl, shift, alt = false, false, false
     local key = nil
@@ -115,30 +118,30 @@ local function parse_specification(specification)
     for part in string.gmatch(text, "[^+]+") do
         part_count = part_count + 1
         if part == "CTRL" or part == "CONTROL" then
-            if ctrl then return nil, "CTRL was specified more than once" end
+            if ctrl then return nil, T("modifierRepeated", { modifier = "CTRL" }) end
             ctrl = true
         elseif part == "SHIFT" then
-            if shift then return nil, "SHIFT was specified more than once" end
+            if shift then return nil, T("modifierRepeated", { modifier = "SHIFT" }) end
             shift = true
         elseif part == "ALT" then
-            if alt then return nil, "ALT was specified more than once" end
+            if alt then return nil, T("modifierRepeated", { modifier = "ALT" }) end
             alt = true
         elseif FORBIDDEN_MODIFIERS[part] then
-            return nil, "Windows-key shortcuts are unsupported"
+            return nil, T("windowsKeyUnsupported")
         else
             if key ~= nil then
-                return nil, "only one ordinary key is allowed"
+                return nil, T("oneOrdinaryKeyAllowed")
             end
             key = normalize_key(part)
         end
     end
 
     if part_count == 0 or key == nil then
-        return nil, "one ordinary key is required"
+        return nil, T("oneOrdinaryKeyRequired")
     end
     local key_token = KEYS[key]
     if key_token == nil then
-        return nil, "unsupported key: " .. tostring(key)
+        return nil, T("unsupportedKey", { key = key })
     end
     local blocked = blocked_combination(key, ctrl, shift, alt)
     if blocked ~= nil then return nil, blocked end
@@ -226,7 +229,7 @@ end
 
 function Module.new(dll_path)
     if package == nil or type(package.loadlib) ~= "function" then
-        return nil, "Lua package.loadlib is unavailable"
+        return nil, T("luaLoadlibUnavailable")
     end
     local client = setmetatable({
         dllPath = tostring(dll_path or default_dll_path()),

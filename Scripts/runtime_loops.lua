@@ -4,11 +4,23 @@ RuntimeLoops.__index = RuntimeLoops
 function RuntimeLoops.new(options)
     local self = setmetatable({}, RuntimeLoops)
     self.options = options or {}
+    self.selectionFailure = nil
+    self.selectionFailureLoggedAt = 0.0
 
     self.selectionGameCallback = function()
         local ok, err = pcall(self.options.selectionTick)
         if not ok then
-            self.options.log("Selection tick error: " .. tostring(err), true)
+            local message = tostring(err)
+            local now = os.clock()
+            if self.selectionFailure ~= message
+                or now - self.selectionFailureLoggedAt >= 5.0 then
+                self.selectionFailure = message
+                self.selectionFailureLoggedAt = now
+                self.options.log("Selection tick error: " .. message, true)
+            end
+        elseif self.selectionFailure ~= nil then
+            self.selectionFailure = nil
+            self.options.log("Selection tick recovered", true)
         end
     end
 

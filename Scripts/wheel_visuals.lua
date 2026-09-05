@@ -1,6 +1,9 @@
-
 local Visuals = {}
 Visuals.__index = Visuals
+
+local L = require("localization")
+local TextLayout = require("text_layout")
+local function T(key, variables) return L.get(key, variables) end
 
 local function safe(callback)
     return pcall(callback)
@@ -22,6 +25,20 @@ local function setScale(widget, value)
     safe(function() widget:SetRenderScale({ X = value, Y = value }) end)
 end
 
+local function setFontSize(widget, size)
+    if widget == nil then return end
+    safe(function()
+        local font = widget.Font
+        font.Size = math.floor(tonumber(size) or font.Size or 12)
+        widget:SetFont(font)
+    end)
+end
+
+local function setCanvasPosition(widget, x, y)
+    if widget == nil or widget.Slot == nil then return end
+    safe(function() widget.Slot:SetPosition({ X = x, Y = y }) end)
+end
+
 function Visuals.new(options)
     return setmetatable({
         o = options,
@@ -39,13 +56,18 @@ function Visuals.new(options)
         directionDegrees = 0.0,
         openedAt = 0.0,
         opening = false,
+        transition = "open",
+        centerX = 0.0,
+        centerY = 0.0,
         duration = clamp(options.cfg("wheelOpenAnimationSeconds", 0.15), 0.08, 0.30),
+        pageFadeDuration = clamp(options.cfg("wheelPageFadeSeconds", 0.11), 0.06, 0.24),
         cascade = clamp(options.cfg("wheelSlotCascadeSeconds", 0.11), 0.04, 0.24),
     }, Visuals)
 end
 
 function Visuals:build(tree, root, centerX, centerY, centerSize)
     local o = self.o
+    self.centerX, self.centerY = centerX, centerY
     local ringSize = clamp(centerSize * 0.88, 72, 138)
 
     local diamondSize = clamp(centerSize * 0.70, 58, 104)
@@ -119,10 +141,15 @@ function Visuals:build(tree, root, centerX, centerY, centerSize)
     end
     self.pointer = pointer
 
-    self.title = o.createText(tree, root, "I",
-        centerX - 70, centerY - 23, 140, 25, 15)
-    self.subtitle = o.createText(tree, root, "",
-        centerX - 78, centerY + 1, 156, 24, 12)
+    if type(o.createCenteredText) == "function" then
+        self.title = o.createCenteredText(tree, root, "I", centerX, centerY, 30)
+        self.subtitle = o.createCenteredText(tree, root, "", centerX, centerY + 16, 12)
+    else
+        self.title = o.createText(tree, root, "I",
+            centerX - 70, centerY - 18, 140, 36, 30, 1)
+        self.subtitle = o.createText(tree, root, "",
+            centerX - 78, centerY + 1, 156, 24, 12, 1)
+    end
     setOpacity(self.subtitle, 0.82)
     self:setDirection(nil, 0.0, 1.0)
 end
@@ -146,34 +173,45 @@ function Visuals:details(definition, palName)
     if type(definition) ~= "table" then return "", "" end
     if definition.kind == "sphere" then
         return tostring(definition.sphereShort or definition.sphereName or definition.label),
-            "CR" .. tostring(definition.captureRate or "--")
+            T("captureRateShort") .. tostring(definition.captureRate or "--")
     end
 
     local title = tostring(definition.label or definition.short or "")
     if definition.kind == "pal" or definition.kind == "weapon" then
         return title, definition.kind == "pal"
-            and (tostring(palName or "") ~= "" and tostring(palName) or "Party Pal")
-            or "Equipped weapon"
+            and (tostring(palName or "") ~= "" and tostring(palName) or T("partyPal"))
+            or T("equippedWeapon")
     end
     return title, definition.kind == "empty" and "" or tostring(definition.detail or "")
 end
 
-function Visuals:updateHighlight(definition, selected, page, sectors, palName)
+function Visuals:updateHighlight(definition, selected, page, sectors, palName, wheelMode)
     self.selected = selected
     self.page = page or 1
     self.sectors = sectors
+    local isMain = wheelMode == nil or wheelMode == "main"
     if selected == nil then
-        local pageLabel = self.page == 1 and "I"
-            or (self.page == 2 and "II" or "III")
+        local pageLabel = isMain
+            and (self.page == 1 and "I" or (self.page == 2 and "II" or "III"))
+            or T("sphereCenter")
         self.o.setText(self.title, pageLabel)
         self.o.setText(self.subtitle, "")
-        safe(function() self.title:SetRenderTranslation({ X = 0.0,
-            Y = tonumber(self.o.cfg("centerPageNumeralYOffset", 7)) or 7 }) end)
+        setFontSize(self.title, isMain and 30 or 15)
+        setCanvasPosition(self.title, self.centerX, self.centerY)
+        setCanvasPosition(self.subtitle, self.centerX, self.centerY + 16)
     else
         local title, subtitle = self:details(definition, palName)
         self.o.setText(self.title, title)
         self.o.setText(self.subtitle, subtitle)
-        safe(function() self.title:SetRenderTranslation({ X = 0.0, Y = 0.0 }) end)
+        setFontSize(self.title, TextLayout.fitFontSize(title, 15, 150, 34, 8))
+        setFontSize(self.subtitle, TextLayout.fitFontSize(subtitle, 12, 156, 24, 7))
+        setCanvasPosition(self.title, self.centerX, self.centerY - 10)
+        setCanvasPosition(self.subtitle, self.centerX, self.centerY + 15)
+    end
+
+    if type(self.o.setTextShadow) == "function" then
+        self.o.setTextShadow(self.title, isMain)
+        self.o.setTextShadow(self.subtitle, isMain)
     end
 
     for index, sector in ipairs(sectors or {}) do
@@ -181,6 +219,7 @@ function Visuals:updateHighlight(definition, selected, page, sectors, palName)
             local scale = index == selected and layerPage == self.page
                 and clamp(self.o.cfg("wheelSelectedContentScale", 1.58), 1.02, 1.80)
                 or 1.0
+            setScale(layer.icon, scale)
             setScale(layer.label, scale)
             setScale(layer.detailLabel, scale)
         end
@@ -193,6 +232,7 @@ function Visuals:begin(panel, sectors, page)
     self.page = page or 1
     self.openedAt = os.clock()
     self.opening = true
+    self.transition = "open"
     setOpacity(panel, 0.02)
     setScale(panel, 0.92)
     for _, sector in ipairs(sectors or {}) do
@@ -204,6 +244,17 @@ function Visuals:begin(panel, sectors, page)
     end
 end
 
+function Visuals:beginPageFade(panel, sectors, page)
+    self.panel = panel
+    self.sectors = sectors
+    self.page = page or 1
+    self.openedAt = os.clock()
+    self.opening = true
+    self.transition = "page"
+    setScale(panel, 1.0)
+    setOpacity(panel, 0.04)
+end
+
 function Visuals:tick()
     if not self.opening then
         if self.ring ~= nil then
@@ -213,6 +264,21 @@ function Visuals:tick()
     end
 
     local elapsed = math.max(0.0, os.clock() - self.openedAt)
+    if self.transition == "page" then
+        local progress = clamp(elapsed / self.pageFadeDuration, 0.0, 1.0)
+        local eased = 1.0 - (1.0 - progress) * (1.0 - progress)
+        setOpacity(self.panel, eased)
+        setScale(self.panel, 1.0)
+        if self.ring ~= nil then
+            self.o.setRotation(self.ring, (os.clock() * 42.0) % 360.0)
+        end
+        if progress >= 1.0 then
+            self.opening = false
+            setOpacity(self.panel, 1.0)
+        end
+        return
+    end
+
     local progress = clamp(elapsed / self.duration, 0.0, 1.0)
     local eased = 1.0 - (1.0 - progress) * (1.0 - progress)
     setOpacity(self.panel, eased)
@@ -249,6 +315,7 @@ function Visuals:reset()
     self.subtitle = nil
     self.sectors = nil
     self.opening = false
+    self.transition = "open"
 end
 
 return Visuals

@@ -1,6 +1,9 @@
 local SphereActions = {}
 SphereActions.__index = SphereActions
 
+local L = require("localization")
+local function T(key, variables) return L.get(key, variables) end
+
 local SPHERE_ORDER = {
     "PalSphere", "PalSphere_Mega", "PalSphere_Giga", "PalSphere_Tera",
     "PalSphere_Master", "PalSphere_Legend", "PalSphere_Ultimate",
@@ -32,6 +35,21 @@ function SphereActions:selectedStaticId(loadout)
     return o.normalizedName(selectedId)
 end
 
+function SphereActions:isSelected(sphereDef)
+    local o = self.options
+    if sphereDef == nil or sphereDef.sphereId == nil then return false end
+    local player = o.getLocalPlayerCharacter()
+    local loadout = nil
+    if o.alive(player) then
+        pcall(function() loadout = player.LoadoutSelectorComponent end)
+        if not o.alive(loadout) then
+            pcall(function() loadout = player:GetLoadoutSelectorComponent() end)
+        end
+    end
+    if not o.alive(loadout) then return false end
+    return self:selectedStaticId(loadout) == o.normalizedName(sphereDef.sphereId)
+end
+
 function SphereActions:ownedOrder(inventoryData)
     local o, owned = self.options, {}
     for _, staticId in ipairs(SPHERE_ORDER) do
@@ -40,6 +58,15 @@ function SphereActions:ownedOrder(inventoryData)
         end
     end
     return owned
+end
+
+function SphereActions:count(sphereDef)
+    if sphereDef == nil or sphereDef.sphereId == nil then return 0 end
+    return self:itemCount(self.options.getLocalInventoryData(), sphereDef.sphereId)
+end
+
+function SphereActions:isAvailable(sphereDef)
+    return self:count(sphereDef) > 0
 end
 
 local function indexOfValue(values, wanted)
@@ -69,7 +96,7 @@ function SphereActions:select(sphereDef, options)
     if not o.alive(inventoryData)
         or self:itemCount(inventoryData, sphereDef.sphereId) <= 0 then
         if options.notifyMissing ~= false then
-            o.showCenterNotification(displayName .. " not in inventory")
+            o.showCenterNotification(T("sphereMissingInventory", { sphere = displayName }), true)
         end
         o.log(displayName .. " not in local inventory", true)
         return false
@@ -113,7 +140,7 @@ function SphereActions:process()
     if not o.alive(request.loadout) then self.queue = nil return end
     local currentId = self:selectedStaticId(request.loadout)
     if currentId == request.targetId then
-        o.log("Verified selected sphere: " .. tostring(request.displayName), true)
+        o.log("Verified selected sphere: " .. tostring(request.displayName))
         self.queue = nil
         return
     end

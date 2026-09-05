@@ -210,6 +210,41 @@ function PalActions:summonSlotNearPlayer(index)
         return false
     end
 
+    
+    
+    
+    if select(2, pcall(function() return pc:IsRiding() == true end)) == true then
+        return false
+    end
+
+    
+    
+    
+    
+    local arenaSubsystem = nil
+    pcall(function() arenaSubsystem = FindFirstOf("BP_PalArenaWorldSubsystem_C") end)
+    if not o.alive(arenaSubsystem) then
+        pcall(function() arenaSubsystem = FindFirstOf("PalArenaWorldSubsystem") end)
+    end
+    if o.alive(arenaSubsystem) then
+        local arenaSequencer = nil
+        pcall(function() arenaSequencer = arenaSubsystem:GetLocalPlayerSequencer() end)
+        if o.alive(arenaSequencer) then
+            local arenaSequence = nil
+            pcall(function() arenaSequence = arenaSequencer:GetCurrentSequence() end)
+            if not o.alive(arenaSequence) then
+                pcall(function() arenaSequence = arenaSequencer.CurrentSequence end)
+            end
+            if o.alive(arenaSequence) then
+                local arenaSequenceName = ""
+                pcall(function() arenaSequenceName = tostring(arenaSequence:GetFullName() or "") end)
+                if arenaSequenceName:find("BP_ArenaSequence_InBattle_C", 1, true) ~= nil then
+                    return false
+                end
+            end
+        end
+    end
+
     o.reassertGameplayCursorState(pc)
     if not self:selectSlotNatively(pc, index, "activation") then
         if not self:selectSlot(pc, index, "activation fallback") then

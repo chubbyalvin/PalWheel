@@ -4,9 +4,6 @@ ControllerHaptics.__index = ControllerHaptics
 local ACTION_START = 0
 local ACTION_STOP = 2
 local LATENT_UUID = 1346459464
-local INTENSITY = 0.14
-local DURATION_SECONDS = 0.035
-local MINIMUM_INTERVAL_SECONDS = 0.025
 
 function ControllerHaptics.new(options)
     return setmetatable({
@@ -29,20 +26,30 @@ end
 
 function ControllerHaptics:pulse(pc, slot)
     local o = self.o
-    if o.cfg("controllerHighlightHapticsEnabled", true) ~= true
-        or not o.alive(pc) then
-        return false
-    end
+    local level = math.floor(o.clamp(tonumber(
+        o.cfg("controllerHighlightHapticsLevel", 3)) or 3, 0, 3))
+    if level == 0 or not o.alive(pc) then return false end
+
     local now = os.clock()
-    if now - self.lastPulseAt < MINIMUM_INTERVAL_SECONDS then return false end
+    local minimumInterval = o.clamp(
+        o.cfg("controllerHighlightHapticsMinIntervalSeconds", 0.025),
+        0.0, 0.25)
+    if now - self.lastPulseAt < minimumInterval then return false end
+
+    local intensities = { 0.06, 0.14, 0.22 }
+    local intensity = intensities[level]
+    local duration = o.clamp(
+        o.cfg("controllerHighlightHapticsDurationSeconds", 0.035),
+        0.005, 0.15)
     local dilation = 1.0
     if type(o.effectiveTimeDilation) == "function" then
         dilation = o.clamp(tonumber(o.effectiveTimeDilation()) or 1.0, 0.01, 1.0)
     end
-    local duration = o.clamp(DURATION_SECONDS * dilation, 0.001, 0.15)
+    duration = o.clamp(duration * dilation, 0.001, 0.15)
+
     local ok, why = pcall(function()
         pc:PlayDynamicForceFeedback(
-            INTENSITY, duration,
+            intensity, duration,
             true, true, true, true,
             ACTION_START, self:latentInfo(pc))
     end)
@@ -53,14 +60,15 @@ function ControllerHaptics:pulse(pc, slot)
         end
         return false
     end
+
     self.lastPulseAt = now
     self.active = true
     if not self.availableLogged then
         self.availableLogged = true
         o.log("Controller highlight haptics started successfully", true)
     end
-    o.log("Controller highlight haptic pulse requested for slot "
-        .. tostring(slot), false)
+    o.log("Controller highlight haptic level " .. tostring(level)
+        .. " pulse requested for slot " .. tostring(slot), false)
     return true
 end
 

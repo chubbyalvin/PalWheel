@@ -2,11 +2,169 @@
 local Builder = {}
 Builder.__index = Builder
 
+local L = require("localization")
+local TextLayout = require("text_layout")
+local function T(key, variables) return L.get(key, variables) end
+
 local PAGE_SIZE = 12
 local TOTAL_SLOTS = 36
 
 local function safe(callback)
     return pcall(callback)
+end
+
+local BRAND_WHITE = { R = 1.00, G = 1.00, B = 1.00, A = 1.0 }
+local BRAND_GOLD = { R = 0.961, G = 0.631, B = 0.102, A = 1.0 }
+
+local BRAND_FONT_PATH = "/Game/Pal/Font/Anton-Regular_Font.Anton-Regular_Font"
+local BRAND_FONT_PACKAGE = "/Game/Pal/Font/Anton-Regular_Font"
+local UI_FONT_PATH = "/Game/Pal/Font/Ft_PalDefaultFont.Ft_PalDefaultFont"
+local UI_FONT_PACKAGE = "/Game/Pal/Font/Ft_PalDefaultFont"
+local brandFontObject = nil
+local brandFontAttempted = false
+local uiFontObject = nil
+local uiFontAttempted = false
+
+local function getBrandFont()
+    if brandFontAttempted then return brandFontObject end
+    brandFontAttempted = true
+    local ok, object = safe(function() return StaticFindObject(BRAND_FONT_PATH) end)
+    if ok and object ~= nil then
+        brandFontObject = object
+        return brandFontObject
+    end
+    if type(LoadAsset) == "function" then
+        safe(function() LoadAsset(BRAND_FONT_PACKAGE) end)
+        safe(function() LoadAsset(BRAND_FONT_PATH) end)
+    end
+    ok, object = safe(function() return StaticFindObject(BRAND_FONT_PATH) end)
+    if ok and object ~= nil then brandFontObject = object end
+    return brandFontObject
+end
+
+local function getUIFont()
+    if uiFontAttempted then return uiFontObject end
+    uiFontAttempted = true
+    local ok, object = safe(function() return StaticFindObject(UI_FONT_PATH) end)
+    if ok and object ~= nil then
+        uiFontObject = object
+        return uiFontObject
+    end
+    if type(LoadAsset) == "function" then
+        safe(function() LoadAsset(UI_FONT_PACKAGE) end)
+        safe(function() LoadAsset(UI_FONT_PATH) end)
+    end
+    ok, object = safe(function() return StaticFindObject(UI_FONT_PATH) end)
+    if ok and object ~= nil then uiFontObject = object end
+    return uiFontObject
+end
+
+local function styleText(widget, color, fontSize, bold, useBrandFont)
+    if widget == nil then return end
+    if tonumber(fontSize) ~= nil or bold == true or useBrandFont == true then
+        safe(function()
+            local font = widget.Font
+            if tonumber(fontSize) ~= nil then
+                font.Size = math.floor(tonumber(fontSize))
+            end
+            if useBrandFont == true then
+                local fontObject = getBrandFont()
+                if fontObject ~= nil then font.FontObject = fontObject end
+                local okName, regularName = safe(function() return FName("Regular") end)
+                font.TypefaceFontName = (okName and regularName ~= nil) and regularName or "Regular"
+            else
+                local fontObject = getUIFont()
+                if fontObject ~= nil then font.FontObject = fontObject end
+            end
+            if useBrandFont ~= true and bold == true then
+                local okName, boldName = safe(function() return FName("Bold") end)
+                if okName and boldName ~= nil then
+                    font.TypefaceFontName = boldName
+                else
+                    font.TypefaceFontName = "Bold"
+                end
+            end
+            widget:SetFont(font)
+        end)
+    end
+    if color ~= nil then
+        local ok = safe(function()
+            widget:SetColorAndOpacity({ SpecifiedColor = color, ColorUseRule = 0 })
+        end)
+        if not ok then
+            ok = safe(function()
+                local slate = widget.ColorAndOpacity
+                slate.SpecifiedColor = color
+                slate.ColorUseRule = 0
+                widget:SetColorAndOpacity(slate)
+            end)
+        end
+        if not ok then
+            safe(function() widget:SetColorAndOpacity(color) end)
+        end
+    end
+end
+
+local function createBrandText(o, root, suffix, x, y, width, height, fontSize, boldSuffix)
+    local box = o.construct("/Script/UMG.HorizontalBox", o.state.tree)
+    local boxSlot = box and o.addToCanvas(root, box) or nil
+    if boxSlot == nil then return nil end
+    o.place(boxSlot, x, y, width, height)
+    safe(function() box:SetVisibility(o.hitTestInvisible) end)
+
+    local function addPiece(textValue, color, bold)
+        local text = o.construct("/Script/UMG.TextBlock", o.state.tree)
+        if text == nil then return false end
+        local added, childSlot = safe(function() return box:AddChildToHorizontalBox(text) end)
+        if not added or childSlot == nil then
+            added, childSlot = safe(function() return box:AddChild(text) end)
+        end
+        if not added or childSlot == nil then return false end
+        o.setText(text, textValue)
+        styleText(text, color, fontSize, bold, true)
+        safe(function() text:SetAutoWrapText(false) end)
+        safe(function() text:SetVisibility(o.hitTestInvisible) end)
+        return true
+    end
+
+    if not addPiece("PAL", BRAND_WHITE, true)
+        or not addPiece("WHEEL", BRAND_GOLD, true)
+        or not addPiece(tostring(suffix or ""), BRAND_WHITE, boldSuffix == true) then
+        safe(function() box:RemoveFromParent() end)
+        return nil
+    end
+    return box
+end
+
+local function createAuthorText(o, root, prefix, x, y, width, height, fontSize)
+    local box = o.construct("/Script/UMG.HorizontalBox", o.state.tree)
+    local boxSlot = box and o.addToCanvas(root, box) or nil
+    if boxSlot == nil then return nil end
+    o.place(boxSlot, x, y, width, height)
+    safe(function() box:SetVisibility(o.hitTestInvisible) end)
+
+    local function addPiece(textValue, color, brand)
+        local text = o.construct("/Script/UMG.TextBlock", o.state.tree)
+        if text == nil then return false end
+        local added, childSlot = safe(function() return box:AddChildToHorizontalBox(text) end)
+        if not added or childSlot == nil then
+            added, childSlot = safe(function() return box:AddChild(text) end)
+        end
+        if not added or childSlot == nil then return false end
+        o.setText(text, textValue)
+        styleText(text, color, fontSize, brand == true, brand == true)
+        safe(function() text:SetAutoWrapText(false) end)
+        safe(function() text:SetVisibility(o.hitTestInvisible) end)
+        return true
+    end
+
+    if not addPiece(tostring(prefix or ""), BRAND_WHITE, false)
+        or not addPiece("CHUBBY", BRAND_WHITE, true)
+        or not addPiece("ALVIN", BRAND_GOLD, true) then
+        safe(function() box:RemoveFromParent() end)
+        return nil
+    end
+    return box
 end
 
 function Builder.new(options)
@@ -20,14 +178,15 @@ function Builder.new(options)
         groupRow = 1,
         root = nil,
         progressText = nil,
+        rowWidgets = {},
         picker = nil,
-        totalUnits = 69,
+        totalUnits = 73,
         completedUnits = 0,
         editorRoot = nil,
     }, Builder)
 end
 
-function Builder:cell(x, y, width, height, color, textValue, textInset, fontSize)
+function Builder:cell(x, y, width, height, color, textValue, textInset, fontSize, justification)
     local o, root = self.o, self.root
     local border = o.construct("/Script/UMG.Border", o.state.tree)
     local slot = border and o.addToCanvas(root, border) or nil
@@ -37,8 +196,26 @@ function Builder:cell(x, y, width, height, color, textValue, textInset, fontSize
         safe(function() border:SetVisibility(o.hitTestInvisible) end)
     end
     local inset = textInset or 10
-    local text = o.createText(o.state.tree, root, textValue or "", x + inset, y + 7,
-        math.max(10, width - inset * 2), math.max(20, height - 10), fontSize)
+    local size = tonumber(fontSize) or 13
+    local centered = justification == nil or tonumber(justification) == 1
+    local textX = centered and (x + width * 0.5) or (x + inset)
+    local textY = y + height * 0.5
+    local textWidth = math.max(10, width - inset * 2)
+    local textHeight = math.max(18, height - 4)
+    size = TextLayout.fitFontSize(textValue or "", size, textWidth, textHeight, 8)
+    local text = o.createText(o.state.tree, root, textValue or "", textX, textY,
+        textWidth, textHeight,
+        size, centered and 1 or (tonumber(justification) or 0))
+    
+    
+    
+    safe(function()
+        if text ~= nil and text.Slot ~= nil then
+            text.Slot:SetAutoSize(false)
+            text.Slot:SetAlignment({ X = centered and 0.5 or 0.0, Y = 0.5 })
+            text.Slot:SetPosition({ X = textX, Y = textY })
+        end
+    end)
     return border, text
 end
 
@@ -66,6 +243,19 @@ function Builder:outline(x, y, width, height, thickness)
     }
 end
 
+function Builder:updateMenuHint()
+    local o, state = self.o, self.o.state
+    if state.editorMenuHintText == nil then return end
+    local value = o.cfg("settingsKey", "F7")
+    local display = o.cfg("displayName", nil)
+    local label = tostring(value or "F7")
+    if type(display) == "function" then
+        local ok, result = pcall(display, value)
+        if ok and result ~= nil then label = tostring(result) end
+    end
+    o.setText(state.editorMenuHintText, T("menuHint", { key = label }))
+end
+
 function Builder:updateProgress()
     if self.progressText == nil then return end
     if self.complete then
@@ -73,7 +263,7 @@ function Builder:updateProgress()
         return
     end
     local percent = math.floor(self.completedUnits / self.totalUnits * 100)
-    self.o.setText(self.progressText, "Preparing editor  " .. tostring(percent) .. "%")
+    self.o.setText(self.progressText, T("preparingMenu", { percent = percent }))
 end
 
 function Builder:start(pc)
@@ -98,84 +288,135 @@ function Builder:start(pc)
     end
     self:outline(130, 82, 1660, 914, 2)
 
-    o.createText(state.tree, editorPanel, "PALWHEEL ASSIGNMENTS", 180, 108, 760, 42, nil, 0)
-    local settingsKey = tostring(o.cfg("settingsKey") or "settings key")
-    local displayName = o.cfg("displayName", nil)
-    if type(displayName) == "function" then settingsKey = displayName(settingsKey) end
-    o.createText(state.tree, editorPanel,
-        "Click an assigned-function cell to choose directly.  "
-            .. settingsKey .. " closes the editor.",
+    createBrandText(o, editorPanel, T("menuSuffix"), 180, 108, 760, 42, 24, true)
+    state.editorMenuHintText = o.createText(state.tree, editorPanel, "",
         180, 148, 1200, 32, 14, 0)
+    self:updateMenuHint()
 
-    o.createText(state.tree, editorPanel, "WHEELS", 180, 195, 100, 30, 15)
-    local wheelCountBorder
-    wheelCountBorder, state.editorWheelCountText = self:cell(
-        280, 188, 120, 42, o.colors.button, "", 14, 15)
-    state.editorWheelCountDropdownRect = { x = 280, y = 188, w = 120, h = 42 }
+    
+    local TOP_CONTROL_Y = 194
+    local TOP_CONTROL_H = 30
+    local TOP_CONTROL_FONT = 11
+    local function createCompactLabel(label, x, width, centerY, fontSize)
+        local size = tonumber(fontSize) or TOP_CONTROL_FONT
+        local text = o.createText(state.tree, editorPanel, label, x, centerY,
+            width, 20, size, 0, 8)
+        safe(function()
+            if text ~= nil and text.Slot ~= nil then
+                text.Slot:SetAlignment({ X = 0.0, Y = 0.5 })
+                text.Slot:SetPosition({ X = x, Y = centerY - 10 })
+            end
+        end)
+        return text
+    end
+
+    local TOP_LABEL_CENTER_Y = TOP_CONTROL_Y + TOP_CONTROL_H * 0.5
+    createCompactLabel(T("wheels"), 180, 70, TOP_LABEL_CENTER_Y)
+    local palWheelCountBorder
+    palWheelCountBorder, state.editorWheelCountText = self:cell(
+        260, TOP_CONTROL_Y, 70, TOP_CONTROL_H, o.colors.button, "", 8, TOP_CONTROL_FONT)
+    state.editorWheelCountDropdownRect = { x = 260, y = TOP_CONTROL_Y, w = 70, h = TOP_CONTROL_H }
     o.updateWheelCountText()
 
-    o.createText(state.tree, editorPanel, "WHEEL SKIN", 445, 195, 125, 30, 15)
-    local skinBorder
-    skinBorder, state.editorSkinText = self:cell(
-        570, 188, 230, 42, o.colors.button, "", 14, 15)
-    state.editorSkinDropdownRect = { x = 570, y = 188, w = 230, h = 42 }
-    o.updateSkinText()
-
-    o.createText(state.tree, editorPanel, "SLOW MOTION", 835, 195, 130, 30, 15)
+    
+    createCompactLabel(T("slowMotion"), 350, 120, TOP_LABEL_CENTER_Y)
     local slowMotionBorder
     slowMotionBorder, state.editorSlowMotionText = self:cell(
-        975, 188, 105, 42, o.colors.button, "", 14, 16)
-    state.editorSlowMotionRect = { x = 975, y = 188, w = 105, h = 42 }
+        480, TOP_CONTROL_Y, 70, TOP_CONTROL_H, o.colors.button, "", 8, TOP_CONTROL_FONT)
+    state.editorSlowMotionRect = { x = 480, y = TOP_CONTROL_Y, w = 70, h = TOP_CONTROL_H }
     o.updateSlowMotionText()
+    
     o.createText(state.tree, editorPanel,
-        "Always disabled in multiplayer.",
-        835, 232, 245, 24, 10)
+        T("multiplayerSlowMotionOff"),
+        350, 219, 200, 16, 5, 0)
 
-    o.createText(state.tree, editorPanel, "WHEEL HAPTICS", 1095, 195, 150, 30, 14)
+    
+    
+    local SKIN_CONTROL_Y = 946
+    local SKIN_LABEL_CENTER_Y = SKIN_CONTROL_Y + TOP_CONTROL_H * 0.5
+    createCompactLabel(T("skin"), 180, 55, SKIN_LABEL_CENTER_Y)
+    local skinBorder
+    skinBorder, state.editorSkinText = self:cell(
+        240, SKIN_CONTROL_Y, 190, TOP_CONTROL_H, o.colors.button, "", 8, TOP_CONTROL_FONT)
+    state.editorSkinDropdownRect = { x = 240, y = SKIN_CONTROL_Y, w = 190, h = TOP_CONTROL_H }
+    o.updateSkinText()
+
+    local resetBorder = self:cell(
+        1270, 104, 230, 36, o.colors.button, T("restoreDefaults"), 0, 12, 1)
+    local instructionsBorder = self:cell(
+        1510, 104, 230, 36, o.colors.button, T("instructions"), 0, 12, 1)
+    state.editorResetShortcutsRect = { x = 1270, y = 104, w = 230, h = 36 }
+    state.editorInstructionsRect = { x = 1510, y = 104, w = 230, h = 36 }
+
+    
+    
+    local controllerGroup = o.construct("/Script/UMG.Border", state.tree)
+    local controllerGroupSlot = controllerGroup and o.addToCanvas(editorPanel, controllerGroup) or nil
+    if controllerGroupSlot ~= nil then
+        o.place(controllerGroupSlot, 1190, 164, 550, 70)
+        o.setBorderColor(controllerGroup, o.colors.rowAlt)
+        safe(function() controllerGroup:SetVisibility(o.hitTestInvisible) end)
+    end
+    o.createText(state.tree, editorPanel, T("controllerOnlySettings"), 1210, 168, 300, 18, 9, 0)
+
+    local CONTROLLER_ROW_Y = 194
+    local CONTROLLER_ROW_H = 30
+    local CONTROLLER_FONT = 11
+
+    o.createText(state.tree, editorPanel, T("zoom"), 1210, 199, 55, 20, CONTROLLER_FONT, 0)
+    state.editorZoomBorder, state.editorZoomText = self:cell(
+        1270, CONTROLLER_ROW_Y, 70, CONTROLLER_ROW_H, o.colors.row, "", 10, CONTROLLER_FONT)
+    state.editorZoomRect = { x = 1270, y = CONTROLLER_ROW_Y, w = 70, h = CONTROLLER_ROW_H }
+    if type(o.updateZoomText) == "function" then o.updateZoomText() end
+
+    o.createText(state.tree, editorPanel, T("haptics"), 1360, 199, 78, 20, CONTROLLER_FONT, 0)
     local hapticsBorder
     hapticsBorder, state.editorHapticsText = self:cell(
-        1260, 188, 90, 42, o.colors.button, "", 14, 16)
-    state.editorHapticsRect = { x = 1260, y = 188, w = 90, h = 42 }
-    if type(o.updateHapticsText) == "function" then o.updateHapticsText() end
+        1440, CONTROLLER_ROW_Y, 70, CONTROLLER_ROW_H, o.colors.button, "", 10, CONTROLLER_FONT)
+    state.editorHapticsRect = { x = 1440, y = CONTROLLER_ROW_Y, w = 70, h = CONTROLLER_ROW_H }
+    o.updateHapticsText()
 
-    local resetBorder, resetText = self:cell(
-        1380, 188, 240, 42, o.colors.button, "RESTORE DEFAULTS", 40, 13)
-    state.editorResetShortcutsRect = { x = 1380, y = 188, w = 240, h = 42 }
-    state.editorResetShortcutsText = resetText
+    o.createText(state.tree, editorPanel, T("followTarget"), 1520, 199, 120, 20, CONTROLLER_FONT, 0)
+    state.editorFollowTargetBorder, state.editorFollowTargetText = self:cell(
+        1650, CONTROLLER_ROW_Y, 70, CONTROLLER_ROW_H, o.colors.row, "", 10, CONTROLLER_FONT)
+    state.editorFollowTargetRect = { x = 1650, y = CONTROLLER_ROW_Y, w = 70, h = CONTROLLER_ROW_H }
+    if type(o.updateFollowTargetText) == "function" then o.updateFollowTargetText() end
 
-    local columnX = { 180, 700, 1220 }
-    local tableW, slotW, gap = 500, 66, 4
+    
+    
+    local columnX = { 180, 487, 794 }
+    local tableW, slotW, gap = 292, 50, 4
     local assignmentW = tableW - slotW - gap
     state.editorCountTexts = {}
     state.editorCountDropdownRects = {}
 
     for page = 1, 3 do
         local x = columnX[page]
-        self:cell(x, 270, tableW, 42, o.colors.button,
-            "WHEEL " .. (o.wheelRoman and o.wheelRoman(page) or tostring(page)),
-            14, 17)
+        self:cell(x, 254, tableW, 42, o.colors.button,
+            T("wheel", { wheel = o.wheelRoman and o.wheelRoman(page) or tostring(page) }),
+            14, 17, 0)
 
-        local countX = x + tableW - 142
+        local countX = x + tableW - 118
         local _, countText = self:cell(
-            countX, 275, 132, 32, o.colors.row, "", 10, 13)
+            countX, 259, 108, 32, o.colors.row, "", 10, 12)
         state.editorCountTexts[page] = countText
         state.editorCountDropdownRects[page] = {
-            x = countX, y = 275, w = 132, h = 32
+            x = countX, y = 259, w = 108, h = 32
         }
         o.updateCountText(page)
 
-        self:cell(x, 315, slotW, 34, o.colors.row, "SLOT", 12, 13)
-        self:cell(x + slotW + gap, 315, assignmentW, 34, o.colors.row,
-            "ASSIGNED FUNCTION", 12, 13)
+        self:cell(x, 299, slotW, 34, o.colors.row, T("slot"), 8, 13)
+        self:cell(x + slotW + gap, 299, assignmentW, 34, o.colors.row,
+            T("functionName"), 10, 12, 0)
     end
 
     self.progressText = o.createText(state.tree, editorPanel,
-        "Preparing editor  0%", 655, 952, 610, 28, 14)
+        T("preparingMenu", { percent = 0 }), 655, 936, 610, 28, 14)
     o.setVisible(editorPanel, false)
     self.started = true
     self.phase = "rows"
     self:updateProgress()
-    o.log("Incremental F7 editor frame prepared", true)
+    o.log("Incremental PalWheel editor frame prepared", true)
     return true
 end
 
@@ -183,22 +424,28 @@ function Builder:buildRow(slotIndex)
     local o, state = self.o, self.o.state
     local page = math.floor((slotIndex - 1) / PAGE_SIZE) + 1
     local localSlot = ((slotIndex - 1) % PAGE_SIZE) + 1
-    local columnX = { 180, 700, 1220 }
+    local columnX = { 180, 487, 794 }
     local x = columnX[page]
-    local y = 353 + (localSlot - 1) * 46
+    local y = 337 + (localSlot - 1) * 46
     local neutral = localSlot % 2 == 0 and o.colors.rowAlt or o.colors.row
-    local slotBorder, slotText = self:cell(x, y, 66, 43, neutral,
-        string.format("%02d", localSlot), 18, 14)
-    local assignmentX = x + 70
+    local slotBorder, slotText = self:cell(x, y, 50, 43, neutral,
+        string.format("%02d", localSlot), 12, 13)
+    local assignmentX = x + 54
     local assignmentBorder, assignmentText = self:cell(
-        assignmentX, y, 430, 43, o.colors.empty, "", 12, 14)
+        assignmentX, y, 238, 43, o.colors.empty, "", 10, 13, 0)
     state.editorRows[slotIndex] = {
         slotBorder = slotBorder,
         slotText = slotText,
         assignmentBorder = assignmentBorder,
         assignmentText = assignmentText,
-        rect = { x = assignmentX, y = y, w = 430, h = 43 },
+        rect = { x = assignmentX, y = y, w = 238, h = 43 },
     }
+    for _, widget in ipairs({
+        slotBorder, slotText, assignmentBorder, assignmentText
+    }) do
+        self.rowWidgets[#self.rowWidgets + 1] = widget
+        o.setVisible(widget, false)
+    end
     o.updateRow(slotIndex)
 end
 
@@ -210,6 +457,7 @@ function Builder:beginPicker()
         o.place(layerSlot, 0, 0,
             tonumber(o.cfg("screenWidth", 1920)) or 1920,
             tonumber(o.cfg("screenHeight", 1080)) or 1080)
+        safe(function() layerSlot:SetZOrder(30) end)
         o.setVisible(pickerLayer, false)
         self.editorRoot = self.root
         self.root = pickerLayer
@@ -217,6 +465,7 @@ function Builder:beginPicker()
         state.editorPickerChildrenInitialized = false
     end
     local pickerX, pickerY, pickerW, pickerH = 205, 188, 1510, 690
+    state.editorPickerPanelRect = { x = pickerX, y = pickerY, w = pickerW, h = pickerH }
     local panel = o.construct("/Script/UMG.Border", state.tree)
     local slot = panel and o.addToCanvas(self.root, panel) or nil
     if slot ~= nil then
@@ -227,24 +476,24 @@ function Builder:beginPicker()
     local pickerOutline = self:outline(pickerX, pickerY, pickerW, pickerH, 2)
     for _, widget in ipairs(pickerOutline) do
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = widget
+        o.setVisible(widget, false)
     end
     state.editorPickerTitle = o.createText(state.tree, self.root,
-        "CHOOSE ASSIGNED FUNCTION", pickerX + 38, pickerY + 22,
+        T("chooseFunction"), pickerX + 38, pickerY + 22,
         pickerW - 76, 42, 18)
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = panel
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = state.editorPickerTitle
+    o.setVisible(panel, false)
+    o.setVisible(state.editorPickerTitle, false)
 
     self.picker = {
-        { title = "WEAPONS", x = 225, width = 170,
+        { title = T("weapons"), x = 225, width = 220,
             ids = { "weapon1", "weapon2", "weapon3", "weapon4", "weapon5", "weapon6" } },
-        { title = "SPHERES", x = 574, width = 220,
-            ids = { "sphere_pal", "sphere_mega", "sphere_giga", "sphere_hyper",
-                "sphere_ultra", "sphere_legendary", "sphere_ultimate",
-                "sphere_exotic", "sphere_sol", "sphere_ancient" } },
-        { title = "EMOTES", x = 806, width = 180,
+        { title = T("palwheel"), x = 225, width = 220, headerY = 620, itemStartY = 662,
+            ids = { "mercy", "empty" } },
+        { title = T("emotes"), x = 951, width = 220,
             ids = { "emote_0", "emote_1", "emote_2", "emote_3", "emote_4",
                 "emote_5", "emote_6", "emote_7", "emote_8" } },
-        { title = "PALWHEEL", x = 998, width = 180, ids = { "map", "mercy", "empty" } },
     }
     self.groupIndex, self.groupRow = 1, 0
 end
@@ -258,12 +507,12 @@ function Builder:buildPickerUnit()
         local border = o.construct("/Script/UMG.Border", state.tree)
         local slot = border and o.addToCanvas(self.root, border) or nil
         if slot ~= nil then
-            o.place(slot, group.x, 276, group.width, 36)
+            o.place(slot, group.x, group.headerY or 276, group.width, 36)
             o.setBorderColor(border, o.colors.button)
             safe(function() border:SetVisibility(o.hitTestInvisible) end)
         end
         local text = o.createText(state.tree, self.root, group.title,
-            group.x + 12, 282, group.width - 24, 26, 14)
+            group.x + 12, (group.headerY or 276) + 6, group.width - 24, 26, 14)
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = border
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = text
         o.setVisible(border, false)
@@ -280,7 +529,7 @@ function Builder:buildPickerUnit()
     end
     local def = o.byId[functionId]
     if def ~= nil then
-        local y = 326 + (self.groupRow - 1) * 48
+        local y = (group.itemStartY or 326) + (self.groupRow - 1) * 48
         local border = o.construct("/Script/UMG.Border", state.tree)
         local slot = border and o.addToCanvas(self.root, border) or nil
         if slot ~= nil then
@@ -291,6 +540,9 @@ function Builder:buildPickerUnit()
         local textInset = 10
         local text = o.createText(state.tree, self.root, def.label,
             group.x + textInset, y + 8, group.width - textInset - 10, 26, 14)
+        if def.available == false or def.pending == true then
+            styleText(text, { R = 1.00, G = 0.18, B = 0.16, A = 1.0 }, nil, true)
+        end
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = border
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = text
         state.editorPickerRects[def.catalogIndex] = {
@@ -308,9 +560,9 @@ function Builder:finish()
     state.editorPartyWidgets = {}
     state.editorPartyRects = {}
     state.editorPartyRowIds = {}
-    local partyX, partyW = 407, 155
+    local partyX, partyW = 457, 220
     local partyHeaderBorder, partyHeaderText = self:cell(
-        partyX, 276, partyW, 36, o.colors.button, "PARTY", 12, 14)
+        partyX, 276, partyW, 36, o.colors.button, T("party"), 12, 14)
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = partyHeaderBorder
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = partyHeaderText
     o.setVisible(partyHeaderBorder, false)
@@ -337,7 +589,7 @@ function Builder:finish()
     state.editorPartyPrevWidgets = { partyPrevBorder, partyPrevText }
     state.editorPartyNextWidgets = { partyNextBorder, partyNextText }
     state.editorPartyPageText = o.createText(
-        state.tree, self.root, "1/1", partyX + 52, 815, partyW - 104, 24, 11)
+        state.tree, self.root, T("page", { page = 1, pages = 1 }), partyX + 48, 815, partyW - 96, 24, 11)
     for _, widget in ipairs({
         partyPrevBorder, partyPrevText, partyNextBorder, partyNextText,
         state.editorPartyPageText
@@ -346,19 +598,60 @@ function Builder:finish()
         o.setVisible(widget, false)
     end
 
+    state.editorPalworldWidgets = {}
+    state.editorPalworldRects = {}
+    state.editorPalworldRowIds = {}
+    local palworldX, palworldW = 689, 250
+    local palworldHeaderBorder, palworldHeaderText = self:cell(
+        palworldX, 276, palworldW, 36, o.colors.button, T("palworld"), 12, 14)
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = palworldHeaderBorder
+    state.editorPickerWidgets[#state.editorPickerWidgets + 1] = palworldHeaderText
+    o.setVisible(palworldHeaderBorder, false)
+    o.setVisible(palworldHeaderText, false)
+    for row = 1, 10 do
+        local y = 326 + (row - 1) * 48
+        local border, label = self:cell(
+            palworldX, y, palworldW, 42, o.colors.menu, "", 10, 13)
+        state.editorPalworldWidgets[row] = { border = border, text = label }
+        state.editorPalworldRects[row] = { x = palworldX, y = y, w = palworldW, h = 42 }
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = border
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = label
+        o.setVisible(border, false)
+        o.setVisible(label, false)
+    end
+    local palworldPrevBorder, palworldPrevText = self:cell(
+        palworldX, 810, 48, 34, o.colors.button, "<", 17, 12)
+    local palworldNextBorder, palworldNextText = self:cell(
+        palworldX + palworldW - 48, 810, 48, 34, o.colors.button, ">", 17, 12)
+    state.editorPalworldPrevRect = { x = palworldX, y = 810, w = 48, h = 34 }
+    state.editorPalworldNextRect = {
+        x = palworldX + palworldW - 48, y = 810, w = 48, h = 34
+    }
+    state.editorPalworldPrevWidgets = { palworldPrevBorder, palworldPrevText }
+    state.editorPalworldNextWidgets = { palworldNextBorder, palworldNextText }
+    state.editorPalworldPageText = o.createText(
+        state.tree, self.root, T("page", { page = 1, pages = 2 }), palworldX + 48, 815, palworldW - 96, 24, 11)
+    for _, widget in ipairs({
+        palworldPrevBorder, palworldPrevText, palworldNextBorder, palworldNextText,
+        state.editorPalworldPageText
+    }) do
+        state.editorPickerWidgets[#state.editorPickerWidgets + 1] = widget
+        o.setVisible(widget, false)
+    end
+
     state.editorShortcutWidgets = {}
     state.editorShortcutRects = {}
     state.editorShortcutRowIds = {}
-    local shortcutX, shortcutW = 1190, 490
+    local shortcutX, shortcutW = 1183, 497
     local shortcutHeaderBorder, shortcutHeaderText = self:cell(
-        shortcutX, 276, shortcutW, 36, o.colors.button, "CUSTOM SHORTCUTS", 12, 14)
+        shortcutX, 276, shortcutW, 36, o.colors.button, T("customShortcuts"), 12, 14)
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = shortcutHeaderBorder
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = shortcutHeaderText
     o.setVisible(shortcutHeaderBorder, false)
     o.setVisible(shortcutHeaderText, false)
     for row = 1, 10 do
         local y = 326 + (row - 1) * 48
-        local border, label = self:cell(shortcutX, y, shortcutW, 42, o.colors.menu, "", 10, 13)
+        local border, label = self:cell(shortcutX, y, shortcutW, 42, o.colors.shortcut, "", 10, 13)
         state.editorShortcutWidgets[row] = { border = border, text = label }
         state.editorShortcutRects[row] = { x = shortcutX, y = y, w = shortcutW, h = 42 }
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = border
@@ -366,22 +659,23 @@ function Builder:finish()
         o.setVisible(border, false)
         o.setVisible(label, false)
     end
-    local prevBorder, prevText = self:cell(shortcutX, 810, 105, 34, o.colors.button, "< PREV", 12, 12)
-    local nextBorder, nextText = self:cell(shortcutX + shortcutW - 105, 810, 105, 34, o.colors.button, "NEXT >", 12, 12)
-    state.editorShortcutPrevRect = { x = shortcutX, y = 810, w = 105, h = 34 }
-    state.editorShortcutNextRect = { x = shortcutX + shortcutW - 105, y = 810, w = 105, h = 34 }
+    local shortcutFooterX = shortcutX + math.floor((shortcutW - 220) * 0.5)
+    local prevBorder, prevText = self:cell(shortcutFooterX, 810, 48, 34, o.colors.button, "<", 17, 12)
+    local nextBorder, nextText = self:cell(shortcutFooterX + 172, 810, 48, 34, o.colors.button, ">", 17, 12)
+    state.editorShortcutPrevRect = { x = shortcutFooterX, y = 810, w = 48, h = 34 }
+    state.editorShortcutNextRect = { x = shortcutFooterX + 172, y = 810, w = 48, h = 34 }
     state.editorShortcutPrevWidgets = { prevBorder, prevText }
     state.editorShortcutNextWidgets = { nextBorder, nextText }
-    state.editorShortcutPageText = o.createText(state.tree, self.root, "Page 1 / 1",
-        shortcutX + 120, 815, shortcutW - 240, 24, 12)
+    state.editorShortcutPageText = o.createText(state.tree, self.root, T("page", { page = 1, pages = 1 }),
+        shortcutFooterX + 48, 815, 124, 24, 11)
     for _, widget in ipairs({ prevBorder, prevText, nextBorder, nextText, state.editorShortcutPageText }) do
         state.editorPickerWidgets[#state.editorPickerWidgets + 1] = widget
         o.setVisible(widget, false)
     end
 
     local help = o.createText(state.tree, self.root,
-        "Right-click or click outside the panel to cancel",
-        710, 832, 500, 28, 12)
+        T("rightClickCancel"),
+        710, 850, 500, 22, 11)
     state.editorPickerWidgets[#state.editorPickerWidgets + 1] = help
     o.setVisible(help, false)
 
@@ -394,59 +688,75 @@ function Builder:finish()
         o.setBorderColor(confirmPanel, o.colors.panel)
     end
     local confirmOutline = self:outline(465, 365, 990, 260, 2)
-    local confirmTitle = o.createText(state.tree, self.root, "RESTORE DEFAULT ASSIGNMENTS?",
+    local confirmTitle = o.createText(state.tree, self.root, T("restorePalwheelDefaultsTitle"),
         515, 395, 890, 36, 18)
     local confirmBody = o.createText(state.tree, self.root,
-        "Restore all 36 wheel slots to PalWheel's packaged default layout?\nWheel count, visible slot counts, controls, and custom shortcut definitions will not change.",
-        515, 445, 890, 72, 13)
-    local yesBorder, yesText = self:cell(760, 545, 180, 44, o.colors.button, "RESTORE", 42, 14)
-    local noBorder, noText = self:cell(980, 545, 180, 44, o.colors.row, "CANCEL", 48, 14)
+        T("restorePalwheelDefaultsBody"),
+        515, 445, 890, 82, 13)
+    local yesBorder, yesText = self:cell(760, 545, 180, 44, o.colors.button, T("restore"), 42, 14)
+    local noBorder, noText = self:cell(980, 545, 180, 44, o.colors.row, T("cancel"), 48, 14)
     state.editorResetConfirmWidgets = { confirmPanel, confirmTitle, confirmBody, yesBorder, yesText, noBorder, noText }
     for _, widget in ipairs(confirmOutline) do
         state.editorResetConfirmWidgets[#state.editorResetConfirmWidgets + 1] = widget
     end
     state.editorResetConfirmYesRect = { x = 760, y = 545, w = 180, h = 44 }
     state.editorResetConfirmNoRect = { x = 980, y = 545, w = 180, h = 44 }
-    for _, widget in ipairs(state.editorResetConfirmWidgets) do o.setVisible(widget, false) end
-    local displayName = o.cfg("displayName", nil)
-    local openKeyboard = tostring(o.cfg("openKey") or "")
-    local pageKeyboard = tostring(o.cfg("keyboardPageButton") or "")
-    local openController = tostring(o.cfg("controllerOpenButton") or "")
-    local pageController = tostring(o.cfg("controllerPageButton") or "")
-    if type(displayName) == "function" then
-        openKeyboard = displayName(openKeyboard)
-        pageKeyboard = displayName(pageKeyboard)
-        openController = displayName(openController)
-        pageController = displayName(pageController)
+    for _, widget in ipairs(state.editorResetConfirmWidgets) do
+        safe(function() if widget ~= nil and widget.Slot ~= nil then widget.Slot:SetZOrder(60) end end)
+        o.setVisible(widget, false)
     end
-    o.createText(state.tree, self.root,
-        "Open Wheel: " .. openKeyboard .. " / " .. openController
-            .. "    |    Toggle Page: " .. pageKeyboard .. " / " .. pageController,
-        180, 927, 1200, 24, 12, 0)
-    o.createText(state.tree, self.root,
-        "Assignments save automatically. Edit Saved\\shortcuts.tsv to add or disable shortcut actions.",
-        180, 951, 1000, 22, 11, 0)
-	o.createText(state.tree, self.root,
-		"PalWheel v" .. tostring(o.cfg("version", "1.0")),
-		1570, 946, 170, 26, 14)
-	o.createText(state.tree, self.root,
-		"by CHUBBYALVIN",
-		1570, 970, 170, 22, 11)
+
+    local discardPanel = o.construct("/Script/UMG.Border", state.tree)
+    local discardSlot = discardPanel and o.addToCanvas(self.root, discardPanel) or nil
+    if discardSlot ~= nil then
+        o.place(discardSlot, 515, 382, 890, 235)
+        o.setBorderColor(discardPanel, o.colors.panel)
+    end
+    local discardOutline = self:outline(515, 382, 890, 235, 2)
+    local discardTitle = o.createText(state.tree, self.root, T("discardMainTitle"),
+        565, 414, 790, 36, 18)
+    local discardBody = o.createText(state.tree, self.root,
+        T("discardMainBody"),
+        565, 466, 790, 52, 13)
+    local discardYesBorder, discardYesText = self:cell(
+        730, 545, 210, 44, o.colors.unavailable or o.colors.row, T("discard"), 60, 14)
+    local discardNoBorder, discardNoText = self:cell(
+        980, 545, 210, 44, o.colors.button, T("cancel"), 62, 14)
+    state.editorDiscardConfirmWidgets = {
+        discardPanel, discardTitle, discardBody,
+        discardYesBorder, discardYesText, discardNoBorder, discardNoText,
+    }
+    for _, widget in ipairs(discardOutline) do
+        state.editorDiscardConfirmWidgets[#state.editorDiscardConfirmWidgets + 1] = widget
+    end
+    state.editorDiscardConfirmYesRect = { x = 730, y = 545, w = 210, h = 44 }
+    state.editorDiscardConfirmNoRect = { x = 980, y = 545, w = 210, h = 44 }
+    for _, widget in ipairs(state.editorDiscardConfirmWidgets) do
+        safe(function() if widget ~= nil and widget.Slot ~= nil then widget.Slot:SetZOrder(60) end end)
+        o.setVisible(widget, false)
+    end
+
+	createBrandText(o, self.root,
+		" v" .. tostring(o.cfg("version", "1.0")),
+		1570, 946, 170, 26, 14, false)
+	createAuthorText(o, self.root, T("authorBy"), 1570, 970, 170, 22, 11)
 
     state.editorCountDropdownWidgets = { {}, {}, {} }
     state.editorCountOptionRects = { {}, {}, {} }
-    local columnX = { 180, 700, 1220 }
+    local columnX = { 180, 487, 794 }
     for page = 1, 3 do
-        local x = columnX[page] + 358
+        local x = columnX[page] + 174
         for value = 4, 12 do
-            local y = 309 + (value - 4) * 38
-            local border, label = self:cell(x, y, 132, 36, o.colors.row,
-                tostring(value) .. " slots", 10, 12)
+            local y = 293 + (value - 4) * 38
+            local border, label = self:cell(x, y, 108, 36, o.colors.row,
+                T("slots", { count = value }), 8, 11)
             state.editorCountDropdownWidgets[page][#state.editorCountDropdownWidgets[page] + 1] = border
             state.editorCountDropdownWidgets[page][#state.editorCountDropdownWidgets[page] + 1] = label
             state.editorCountOptionRects[page][value] = {
-                x = x, y = y, w = 132, h = 36
+                x = x, y = y, w = 108, h = 36
             }
+            safe(function() if border ~= nil and border.Slot ~= nil then border.Slot:SetZOrder(20) end end)
+            safe(function() if label ~= nil and label.Slot ~= nil then label.Slot:SetZOrder(20) end end)
             o.setVisible(border, false)
             o.setVisible(label, false)
         end
@@ -455,12 +765,14 @@ function Builder:finish()
     state.editorWheelCountDropdownWidgets = {}
     state.editorWheelCountOptionRects = {}
     for value = 1, 3 do
-        local y = 232 + (value - 1) * 42
-        local border, label = self:cell(360, y, 120, 40, o.colors.row,
-            tostring(value) .. (value == 1 and " wheel" or " wheels"), 12, 13)
+        local y = 228 + (value - 1) * 34
+        local border, label = self:cell(260, y, 70, 30, o.colors.row,
+            T(value == 1 and "countWheelsOne" or "countWheelsMany", { count = value }), 5, 9)
         state.editorWheelCountDropdownWidgets[#state.editorWheelCountDropdownWidgets + 1] = border
         state.editorWheelCountDropdownWidgets[#state.editorWheelCountDropdownWidgets + 1] = label
-        state.editorWheelCountOptionRects[value] = { x = 360, y = y, w = 120, h = 40 }
+        state.editorWheelCountOptionRects[value] = { x = 260, y = y, w = 70, h = 30 }
+        safe(function() if border ~= nil and border.Slot ~= nil then border.Slot:SetZOrder(20) end end)
+        safe(function() if label ~= nil and label.Slot ~= nil then label.Slot:SetZOrder(20) end end)
         o.setVisible(border, false)
         o.setVisible(label, false)
     end
@@ -469,14 +781,72 @@ function Builder:finish()
     state.editorSkinOptionRects = {}
     local skins = self.o.wheelSkins or { "wheel_01.png", "wheel_02.png" }
     for index, filename in ipairs(skins) do
-        local y = 232 + (index - 1) * 42
-        local border, label = self:cell(650, y, 230, 40, o.colors.row,
-            filename, 14, 13)
+        
+        local y = 868 - (#skins - index) * 34
+        local border, label = self:cell(240, y, 190, 30, o.colors.row,
+            filename, 8, 10)
         state.editorSkinDropdownWidgets[#state.editorSkinDropdownWidgets + 1] = border
         state.editorSkinDropdownWidgets[#state.editorSkinDropdownWidgets + 1] = label
-        state.editorSkinOptionRects[filename] = { x = 650, y = y, w = 230, h = 40 }
+        state.editorSkinOptionRects[filename] = { x = 240, y = y, w = 190, h = 30 }
+        safe(function() if border ~= nil and border.Slot ~= nil then border.Slot:SetZOrder(20) end end)
+        safe(function() if label ~= nil and label.Slot ~= nil then label.Slot:SetZOrder(20) end end)
         o.setVisible(border, false)
         o.setVisible(label, false)
+    end
+    
+    
+    local summaryLayer = o.construct("/Script/UMG.CanvasPanel", state.tree)
+    local summarySlot = summaryLayer and o.addToCanvas(self.root, summaryLayer) or nil
+    if summarySlot ~= nil then
+        o.place(summarySlot, 0, 0, tonumber(o.cfg("screenWidth", 1920)) or 1920,
+            tonumber(o.cfg("screenHeight", 1080)) or 1080)
+        safe(function() summarySlot:SetZOrder(10) end)
+    else
+        summaryLayer = self.root
+    end
+    state.editorSummaryLayer = summaryLayer
+
+    
+    
+    if type(o.buildSphereEditor) == "function" then
+        o.buildSphereEditor(summaryLayer, summaryLayer)
+    end
+    
+    if type(o.buildAuxEditor) == "function" then
+        o.buildAuxEditor(summaryLayer)
+    end
+    if type(o.buildBindingEditor) == "function" then
+        o.buildBindingEditor(self.root, summaryLayer)
+    end
+    if type(o.buildShortcutEditor) == "function" then
+        o.buildShortcutEditor(self.root, summaryLayer)
+    end
+
+    local oldRoot = self.root
+    self.root = summaryLayer
+    local FOOTER_Y = 902
+    local FOOTER_H = 34
+    local FOOTER_W = 250
+    local FOOTER_FONT = 12
+    local saveBorder = self:cell(
+        1340, FOOTER_Y, 190, FOOTER_H, o.colors.saveIdle or o.colors.row,
+        T("saveAndApply"), 38, FOOTER_FONT)
+    state.editorSaveBorder = saveBorder
+    state.editorSaveRect = { x = 1340, y = FOOTER_Y, w = 190, h = FOOTER_H }
+    local closeBorder, closeText = self:cell(
+        1550, FOOTER_Y, 190, FOOTER_H, o.colors.row, T("close"), 64, FOOTER_FONT)
+    state.editorCloseRect = { x = 1550, y = FOOTER_Y, w = 190, h = FOOTER_H }
+    self.root = oldRoot
+
+    if type(o.buildInstructionsPopup) == "function" then o.buildInstructionsPopup(self.root) end
+    if state.instructionsPopup ~= nil then
+        state.editorInstructionsCloseRect = state.instructionsPopup.closeRect
+    end
+    state.editorInstructionsOpen = false
+
+    for _, widget in ipairs(self.rowWidgets or {}) do o.setVisible(widget, true) end
+    for _, widget in ipairs(state.editorPickerWidgets or {}) do
+        o.setVisible(widget, false)
     end
     self.complete = true
     self.phase = "done"
@@ -520,10 +890,6 @@ function Builder:step(maxUnits)
     end
     self:updateProgress()
     return worked
-end
-
-function Builder:isComplete()
-    return self.complete == true
 end
 
 return Builder

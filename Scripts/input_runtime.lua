@@ -8,6 +8,19 @@ local function normalizedKeyName(value)
     return string.lower(text)
 end
 
+local function ue4ssKeyEnumName(options, unrealName)
+    local name = tostring(unrealName or "")
+    local convert = type(options) == "table" and options.cfg or nil
+    if type(convert) == "function" then
+        local mapped = convert("ue4ssKeyName", nil)
+        if type(mapped) == "function" then
+            local ok, value = pcall(mapped, name)
+            if ok and value ~= nil and tostring(value) ~= "" then return tostring(value) end
+        end
+    end
+    return string.upper(name)
+end
+
 function InputRuntime.new(options)
     local self = setmetatable({ options = options or {} }, InputRuntime)
     self.suppressedMappings = {}
@@ -17,66 +30,47 @@ function InputRuntime.new(options)
     self.sessionCancelKeyNames = {}
     self.suppressionActive = false
     self.releaseGuard = false
+    self.mouseActivationReleaseGuard = false
+    self.mouseActivationReleaseEarliest = 0.0
+    self.mouseActivationReleaseKey = nil
     self.suppressionFailureLogged = false
-    self.openGamePending = false
-    self.settingsGamePending = false
-    self.mouseGamePending = false
-    self.pageGamePending = false
-    self.openGameCallback = function()
-        self.openGamePending = false
-        self:handleOpenPressed()
-    end
-    self.settingsGameCallback = function()
-        self.settingsGamePending = false
-        local o = self.options
-        if o.state.open then self:cancel(o.state.settingsKeyName)
-        else o.toggleEditor() end
-    end
-    self.mouseGameCallback = function()
-        self.mouseGamePending = false
-        local o = self.options
-        if o.state.editorOpen then o.handleEditorClick(1)
-        elseif o.state.open then self:cancel(o.state.mouseActivateKeyName) end
-    end
-    self.pageGameCallback = function()
-        self.pageGamePending = false
-        local o = self.options
-        if o.state.editorOpen then o.handleEditorClick(-1)
-        elseif o.state.open and o.cfg("keyboardPageButtonSwitchesPage", true) == true then
-            o.enforcePageAimSuppression()
-            o.switchActivePage()
-        end
-    end
-    self.queueGameCallback = function(pendingField, callback)
-        if self[pendingField] == true then return false end
-        self[pendingField] = true
-        local ok = pcall(ExecuteInGameThread, callback)
-        if not ok then self[pendingField] = false end
-        return ok
-    end
-    self.openCallback = function()
-        self.queueGameCallback("openGamePending", self.openGameCallback)
-    end
-    self.settingsCallback = function()
-        self.queueGameCallback("settingsGamePending", self.settingsGameCallback)
-    end
+    self.settingsCallbacks = {}
+    
+    
+    
+    
+    self.pendingSettingsEvents = {}
+    self.pendingPointerEvents = {}
     self.mouseCallback = function()
         local o = self.options
         if not o.state.open and not o.state.editorOpen then return end
-        self.queueGameCallback("mouseGamePending", self.mouseGameCallback)
+        self.pendingPointerEvents[#self.pendingPointerEvents + 1] = 1
     end
-    self.pageCallback = function()
+    self.editorCancelCallback = function()
         local o = self.options
-        if not o.state.open and not o.state.editorOpen then return end
-        self.queueGameCallback("pageGamePending", self.pageGameCallback)
+        if not o.state.editorOpen then return end
+        self.pendingPointerEvents[#self.pendingPointerEvents + 1] = -1
     end
     self.restartGameCallback = function()
         local o, s = self.options, self.options.state
         self:resetSuppression()
-        o.destroyWidget()
+        local playerCacheRetained = o.alive(s.cachedPlayer)
+        local retainPersistentUi = false
+        if not s.open and not s.editorOpen and o.alive(s.widget)
+            and type(s.iconRuntime) == "table"
+            and type(s.iconRuntime.currentWorldKey) == "function"
+            and tostring(s.iconRuntime.worldKey or "") ~= "" then
+            local restartPc = o.getPlayerController()
+            local okWorld, currentWorldKey = pcall(function()
+                return s.iconRuntime:currentWorldKey(restartPc)
+            end)
+            retainPersistentUi = okWorld and tostring(currentWorldKey or "") ~= ""
+                and tostring(currentWorldKey) == tostring(s.iconRuntime.worldKey)
+        end
+        if not retainPersistentUi then o.destroyWidget() end
         o.destroyCenterNotification()
         s.sessionReady, s.activePalSlot = true, nil
-        local playerCacheRetained = o.alive(s.cachedPlayer)
+        s.pc = nil
         s.cachedGameInstance, s.cachedFishing = nil, nil
         if not playerCacheRetained then s.cachedPlayer = nil end
         s.playerCacheNextPoll = 0.0
@@ -86,15 +80,107 @@ function InputRuntime.new(options)
         s.uiStackCount, s.uiStackLastX, s.uiStackLastY = nil, nil, nil
         s.uiStackNextPoll, s.idlePc = 0.0, nil
         s.keyboardOpenWasDown, s.keyboardOpenHandledAt = false, 0.0
-        s.uiPrebuildReadyAt = os.clock() + 5.0
-        o.log("PlayerController restarted; stale UI discarded, player loadout cache "
-            .. (playerCacheRetained and "retained" or "unavailable")
-            .. ", and fresh text-only UI scheduled", true)
+        s.uiPrebuildReadyAt = retainPersistentUi and math.huge or (os.clock() + 5.0)
+        o.log("PlayerController restarted; "
+            .. (retainPersistentUi and "same-world persistent UI retained"
+                or "stale UI discarded and fresh text-only UI scheduled")
+            .. ", player loadout cache "
+            .. (playerCacheRetained and "retained" or "unavailable"), true)
     end
     self.restartHookCallback = function()
         ExecuteInGameThread(self.restartGameCallback)
     end
     return self
+end
+
+function InputRuntime:registerSettingsBinding()
+    local o, s = self.options, self.options.state
+    local name = tostring(o.cfg("settingsKey") or "")
+    if name == "" then return false, "PalWheel Menu key is empty" end
+    local enumName = ue4ssKeyEnumName(o, name)
+    local keyValue = Key and Key[enumName] or nil
+    if keyValue == nil then
+        return false, "UE4SS Key table has no PalWheel Menu key for Unreal FKey " .. name
+    end
+    s.settingsKeyName, s.settingsKeyValue = name, keyValue
+    local callbackId = normalizedKeyName(name)
+    if self.settingsCallbacks[callbackId] == nil then
+        local registeredName = name
+        local callback = function()
+            if normalizedKeyName(o.cfg("settingsKey")) ~= normalizedKeyName(registeredName) then
+                return
+            end
+            self.pendingSettingsEvents[#self.pendingSettingsEvents + 1] = registeredName
+        end
+        self.settingsCallbacks[callbackId] = callback
+        RegisterKeyBind(keyValue, callback)
+    end
+    return true
+end
+
+function InputRuntime:drainPointerEvents()
+    local handled = false
+
+    
+    
+    
+    if #self.pendingSettingsEvents > 0 then
+        local settingsPending = self.pendingSettingsEvents
+        self.pendingSettingsEvents = {}
+        for _, registeredName in ipairs(settingsPending) do
+            local o = self.options
+            if normalizedKeyName(o.cfg("settingsKey")) == normalizedKeyName(registeredName) then
+                local ok, result = pcall(function()
+                    if o.state.open then self:cancel(registeredName)
+                    else o.toggleEditor() end
+                end)
+                if ok then handled = true
+                elseif type(o.log) == "function" then
+                    o.log("Queued PalWheel Menu event failed: " .. tostring(result), true)
+                end
+            end
+        end
+    end
+
+    if #self.pendingPointerEvents == 0 then return handled end
+
+    
+    
+    
+    local pending = self.pendingPointerEvents
+    self.pendingPointerEvents = {}
+    for _, direction in ipairs(pending) do
+        local o = self.options
+        if o.state.editorOpen then
+            local ok, result = pcall(o.handleEditorClick, direction)
+            if ok and result ~= false then handled = true end
+            if not ok and type(o.log) == "function" then
+                o.log("Queued editor pointer event failed: " .. tostring(result), true)
+            end
+        elseif o.state.open then
+            if direction > 0 then
+                local ok, result = pcall(function()
+                    if type(o.handleWheelPointerClick) == "function" then
+                        return o.handleWheelPointerClick()
+                    end
+                    return false
+                end)
+                if ok and result == true then handled = true end
+                if not ok and type(o.log) == "function" then
+                    o.log("Queued wheel pointer click failed: " .. tostring(result), true)
+                end
+            else
+                local pageIsRightMouse = self:canonicalKeyName(
+                    o.cfg("keyboardNextWheelButton"))
+                    == self:canonicalKeyName("RightMouseButton")
+                if not pageIsRightMouse then
+                    self:cancel("RightMouseButton")
+                    handled = true
+                end
+            end
+        end
+    end
+    return handled
 end
 
 function InputRuntime:canonicalKeyName(value)
@@ -123,7 +209,7 @@ end
 function InputRuntime:addSessionCancelInput(name, key, movementKeys)
     local o, normalized = self.options, self:canonicalKeyName(name)
     local openName = self:canonicalKeyName(o.cfg("openKey"))
-    local pageName = self:canonicalKeyName(o.cfg("keyboardPageButton"))
+    local pageName = self:canonicalKeyName(o.cfg("keyboardNextWheelButton"))
     local settingsName = self:canonicalKeyName(o.cfg("settingsKey"))
     local activateName = self:canonicalKeyName(o.cfg("mouseActivateButton"))
     if normalized == "" or key == nil or movementKeys[normalized]
@@ -140,6 +226,14 @@ function InputRuntime:isInputActive(pc, key)
     local o = self.options
     if not o.alive(pc) or key == nil then return false end
     if o.isKeyDown(pc, key) then return true end
+
+    
+    
+    
+    
+    local okTime, timeDown = pcall(function() return pc:GetInputKeyTimeDown(key) end)
+    if okTime and (tonumber(timeDown) or 0) > 0.0 then return true end
+
     local ok, value = pcall(function() return pc:GetInputAnalogKeyState(key) end)
     return ok and math.abs(tonumber(value) or 0) >= 0.10
 end
@@ -164,6 +258,12 @@ function InputRuntime:restoreSuppression()
     self.sessionCancelKeyNames = {}
     self.suppressionActive = false
     self.releaseGuard = false
+    self.mouseActivationReleaseGuard = false
+    self.mouseActivationReleaseEarliest = 0.0
+    self.mouseActivationReleaseKey = nil
+    if type(self.options.setMouseGameplaySuppressed) == "function" then
+        pcall(self.options.setMouseGameplaySuppressed, false)
+    end
 end
 
 function InputRuntime:resetSuppression()
@@ -173,14 +273,21 @@ end
 function InputRuntime:beginKeyboard(pc)
     local o = self.options
     self:restoreSuppression()
+    o.state.keyboardPageWasDown = self:isInputActive(
+        pc, o.state.keyboardPageFKey)
+    
+    
+    
+    o.state.keyboardPagePressLocked = o.state.keyboardPageWasDown == true
+    o.state.keyboardPageReleaseSince = nil
     local movementKeys = self:movementKeySet()
     local openName = self:canonicalKeyName(o.cfg("openKey"))
-    local pageName = self:canonicalKeyName(o.cfg("keyboardPageButton"))
+    local pageName = self:canonicalKeyName(o.cfg("keyboardNextWheelButton"))
     if movementKeys[openName] then
         o.log("Input conflict: keyboard Open is also configured as movement; movement pass-through wins", true)
     end
     if movementKeys[pageName] then
-        o.log("Input conflict: keyboard Page is also configured as movement; movement pass-through wins", true)
+        o.log("Input conflict: keyboard Next Wheel is also configured as movement; movement pass-through wins", true)
     end
     local playerInput, mappings = nil, nil
     pcall(function() playerInput = pc.PlayerInput end)
@@ -235,16 +342,120 @@ function InputRuntime:beginKeyboard(pc)
     return self.suppressionActive
 end
 
+function InputRuntime:armMouseActivationReleaseGuard(pc)
+    local o = self.options
+    local key = o.state.mouseActivateFKey
+    if key == nil then
+        local ok, value = pcall(o.makeFKey, o.state.mouseActivateKeyName or "LeftMouseButton")
+        if ok then key = value end
+    end
+    self.mouseActivationReleaseGuard = true
+    self.mouseActivationReleaseEarliest = os.clock() + 0.08
+    self.mouseActivationReleaseKey = key
+    if key ~= nil then
+        self:addBlockedKey(o.state.mouseActivateKeyName or "LeftMouseButton", key)
+    end
+end
+
 function InputRuntime:finishKeyboard(pc)
-    if not self.suppressionActive then return end
+    self.options.state.keyboardPageWasDown = false
+    self.options.state.keyboardPagePressLocked = false
+    self.options.state.keyboardPageReleaseSince = nil
+    if not self.suppressionActive and not self.mouseActivationReleaseGuard then return end
     self.suppressionActive = false
-    self.releaseGuard = self:anyBlockedInputActive(pc)
+    self.releaseGuard = self.mouseActivationReleaseGuard or self:anyBlockedInputActive(pc)
     if not self.releaseGuard then self:restoreSuppression() end
+end
+
+function InputRuntime:beginEditorKeyboardIsolation(pc)
+    local o = self.options
+    self:restoreSuppression()
+    local playerInput, mappings = nil, nil
+    pcall(function() playerInput = pc.PlayerInput end)
+    if o.alive(playerInput) then
+        pcall(function() mappings = playerInput.EnhancedActionMappings end)
+    end
+    if mappings == nil then
+        o.log("Editor cannot isolate keyboard menu actions", true)
+        return false
+    end
+    local matched = 0
+    local ok = pcall(function()
+        mappings:ForEach(function(_, element)
+            local mapping = element:get()
+            if mapping == nil then return end
+            local keyText = ""
+            pcall(function() keyText = tostring(mapping.Key.KeyName or "") end)
+            local normalized = self:canonicalKeyName(keyText)
+            if normalized == "" or string.sub(normalized, 1, 7) == "gamepad" then
+                return
+            end
+            local previous = false
+            pcall(function() previous = mapping.bShouldBeIgnored == true end)
+            local changed = pcall(function() mapping.bShouldBeIgnored = true end)
+            local confirmed = false
+            pcall(function() confirmed = mapping.bShouldBeIgnored == true end)
+            if changed and confirmed then
+                self.suppressedMappings[#self.suppressedMappings + 1] = {
+                    mapping = mapping, previous = previous,
+                }
+                local okKey, key = pcall(o.makeFKey, keyText)
+                if okKey and key ~= nil then self:addBlockedKey(keyText, key) end
+                matched = matched + 1
+            end
+        end)
+    end)
+    self.suppressionActive = ok and matched > 0
+    if self.suppressionActive then
+        o.log("Keyboard menu mappings isolated while PalWheel editor is open", true)
+    else
+        o.log("PalWheel editor could not isolate keyboard menu mappings", true)
+    end
+    return self.suppressionActive
+end
+
+function InputRuntime:beginEditorControllerUiIsolation(pc)
+    
+    
+    
+    
+    
+    self:restoreSuppression()
+    self.suppressionActive = false
+    return true
+end
+
+function InputRuntime:beginEditorControllerCapture(pc)
+    local isolated = self:beginEditorKeyboardIsolation(pc)
+    if not isolated then
+        self.options.log("Controller binding capture continuing without keyboard mapping isolation", true)
+    end
+    
+    
+    return true
+end
+
+function InputRuntime:endEditorControllerCapture()
+    self:restoreSuppression()
 end
 
 function InputRuntime:updateReleaseGuard(pc)
     if not self.releaseGuard then return end
-    if not self.options.alive(pc) or not self:anyBlockedInputActive(pc) then
+    if not self.options.alive(pc) then
+        self:restoreSuppression()
+        return
+    end
+
+    if self.mouseActivationReleaseGuard then
+        if os.clock() < (self.mouseActivationReleaseEarliest or 0.0) then return end
+        local key = self.mouseActivationReleaseKey
+        if key ~= nil and self:isInputActive(pc, key) then return end
+        self.mouseActivationReleaseGuard = false
+        self.mouseActivationReleaseKey = nil
+        self.mouseActivationReleaseEarliest = 0.0
+    end
+
+    if not self:anyBlockedInputActive(pc) then
         self:restoreSuppression()
     end
 end
@@ -259,35 +470,75 @@ function InputRuntime:cancel(inputName)
     return true
 end
 
-function InputRuntime:handleOpenPressed()
-    local o = self.options
-    if os.clock() < o.state.ignoreOpenBindUntil then return end
-    local pc = o.getPlayerController()
-    if o.state.editorOpen then return end
-    if o.state.open and o.state.controller ~= nil and o.state.controller:isSession() then
-        self:cancel(o.cfg("openKey"))
-        return
-    end
-    if not o.state.open then
-        o.openWheel(pc, "keyboard")
-        return
-    end
-    if (os.clock() - o.state.openedAt) >= 0.25 then
-        local visibleCount = type(o.visibleSlotCount) == "function"
-            and tonumber(o.visibleSlotCount()) or tonumber(o.cfg("visibleSlotCount", 12)) or 12
-        if o.state.selected ~= nil and o.state.selected >= 1
-            and o.state.selected <= visibleCount then
-            if not o.activateSelectedOption("Open-key fallback press") then
-                o.closeWheel("Fallback open-key press closed the wheel")
-            end
-        else
-            o.closeWheel("Fallback open-key press closed the wheel")
-        end
-    end
-end
-
 function InputRuntime:pollKeyboardWheel(pc)
     local o = self.options
+
+    
+    
+    if type(o.pollHybridDirectShortcut) == "function"
+        and o.pollHybridDirectShortcut(pc) == true then
+        return true
+    end
+
+    local pageDown = self:isInputActive(pc, o.state.keyboardPageFKey)
+    local pageJustPressed, pageJustReleased = false, false
+    if o.alive(pc) and o.state.keyboardPageFKey ~= nil then
+        local okPressed, pressed = pcall(function()
+            return pc:WasInputKeyJustPressed(o.state.keyboardPageFKey)
+        end)
+        if okPressed and type(pressed) == "boolean" then
+            pageJustPressed = pressed == true
+        end
+        local okReleased, released = pcall(function()
+            return pc:WasInputKeyJustReleased(o.state.keyboardPageFKey)
+        end)
+        if okReleased and type(released) == "boolean" then
+            pageJustReleased = released == true
+        end
+    end
+
+    
+    
+    
+    
+    if o.state.keyboardPagePressLocked == true then
+        if pageJustReleased then
+            o.state.keyboardPagePressLocked = false
+            o.state.keyboardPageReleaseSince = nil
+        elseif not pageDown then
+            if o.state.keyboardPageReleaseSince == nil then
+                o.state.keyboardPageReleaseSince = os.clock()
+            elseif (os.clock() - o.state.keyboardPageReleaseSince) >= 0.12 then
+                o.state.keyboardPagePressLocked = false
+                o.state.keyboardPageReleaseSince = nil
+            end
+        else
+            o.state.keyboardPageReleaseSince = nil
+        end
+    end
+
+    
+    
+    
+    
+    local pagePressed = pageJustPressed
+        or (pageDown and o.state.keyboardPageWasDown ~= true)
+
+    
+    
+    
+    o.state.keyboardPageWasDown = pageDown
+    if o.state.keyboardPagePressLocked ~= true and pagePressed
+        and o.cfg("keyboardNextWheelButtonSwitchesWheel", true) == true then
+        o.state.keyboardPagePressLocked = true
+        o.state.keyboardPageReleaseSince = nil
+        o.enforcePageAimSuppression()
+        local okSwitch, switchResult = pcall(o.switchActivePage)
+        if not okSwitch then
+            o.log("Next Wheel page switch failed: " .. tostring(switchResult), true)
+        end
+    end
+
     for _, input in ipairs(o.state.keyboardCancelInputs or {}) do
         local down = o.isKeyDown(pc, input.key)
         local wasDown = o.state.keyboardCancelWasDown[input.name] == true
@@ -307,102 +558,136 @@ function InputRuntime:pollKeyboardWheel(pc)
             return true
         end
     end
+
     local controllerMagnitude = nil
     if type(o.controllerSelectionMagnitude) == "function" then
         controllerMagnitude = tonumber(o.controllerSelectionMagnitude(pc))
     end
-
     local controllerDeadzone = o.clamp(
-        o.cfg("controllerStickDeadzone", 0.25), 0.05, 0.95)
+        o.cfg("controllerStickDeadzone", 0.60), 0.05, 0.95)
 
     if controllerMagnitude ~= nil and controllerMagnitude >= controllerDeadzone
         and type(o.updateSelectionFromController) == "function" then
+        local rememberedMousePresentation = type(o.isMousePresentationRemembered) == "function"
+            and o.isMousePresentationRemembered() == true
+        if (o.state.mousePointerMode == true or rememberedMousePresentation)
+            and type(o.setMousePointerMode) == "function" then
+            o.setMousePointerMode(false)
+        end
         o.state.hybridControllerSelectionActive = true
         o.updateSelectionFromController(pc)
     else
-        local mouseMagnitude = o.updateSelectionFromCursor(
-            pc, o.state.hybridControllerSelectionActive == true)
-        local mouseDeadzone = o.clamp(
-            o.cfg("mouseDeadzone", 42), 5,
-            o.clamp(o.cfg("mouseMaxRadius", 220), 60, 800) - 5)
-        if mouseMagnitude ~= nil and mouseMagnitude >= mouseDeadzone then
+        o.updateSelectionFromCursor(pc)
+        if o.state.mousePointerMode == true then
             o.state.hybridControllerSelectionActive = false
         end
     end
 
-    local down = o.isKeyDown(pc, o.state.openFKey)
+    
+    
+    
+    if o.state.hybridControllerSelectionActive == true
+        and controllerMagnitude ~= nil
+        and type(o.controllerShouldActivateOnStickReturn) == "function"
+        and o.controllerShouldActivateOnStickReturn(controllerMagnitude) then
+        if not o.activateSelectedOption("Hybrid controller stick return") then
+            o.state.hybridControllerSelectionActive = false
+        end
+        return true
+    end
+
+    
+    
+    
+    local down = self:isInputActive(pc, o.state.openFKey)
+    local wasDown = o.state.keyboardOpenWasDown == true
+    o.state.keyboardOpenWasDown = down
+    local toggleBehavior = string.lower(tostring(
+        o.cfg("openWheelBehavior", "hold"))) == "toggle"
+
+    if toggleBehavior then
+        if down and not wasDown then
+            o.state.keyboardToggleCloseArmed = true
+        end
+        if o.state.keyboardToggleCloseArmed and wasDown and not down then
+            o.state.keyboardToggleCloseArmed = false
+            o.closeWheel("Keyboard Open Wheel toggle release closed without activation")
+            return true
+        end
+        return false
+    end
+
     if down then o.state.openKeySawDown = true end
     local grace = o.clamp(o.cfg("releaseGraceSeconds", 0.10), 0.05, 0.40)
     if o.state.openKeySawDown and not down
         and (os.clock() - o.state.openedAt) >= grace then
-        local visibleCount = type(o.visibleSlotCount) == "function"
-            and tonumber(o.visibleSlotCount()) or tonumber(o.cfg("visibleSlotCount", 12)) or 12
-        if o.state.selected ~= nil and o.state.selected >= 1
-            and o.state.selected <= visibleCount then
-            if not o.activateSelectedOption("Open-key release") then
-                o.closeWheel("Open key released over an empty slot")
-            end
-        else
-            o.closeWheel("Open key released without a selection")
-        end
+        o.closeWheel("Open key released without activation")
         return true
     end
     return false
 end
 
+function InputRuntime:applyBindings(pc)
+    local o, s = self.options, self.options.state
+    local settingsOk, settingsError = self:registerSettingsBinding()
+    if not settingsOk then return false, settingsError end
+    s.openKeyName = tostring(o.cfg("openKey") or "")
+    if s.openKeyName == "" then return false, "Open Wheel key is empty" end
+    s.openUnrealKeyName = s.openKeyName
+    s.openFKey = o.makeFKey(s.openUnrealKeyName)
+    s.keyboardPageKeyName = tostring(o.cfg("keyboardNextWheelButton") or "")
+    if s.keyboardPageKeyName == "" then return false, "Next Wheel key is empty" end
+    s.keyboardPageFKey = o.makeFKey(s.keyboardPageKeyName)
+
+    s.keyboardCancelInputs = {}
+    s.keyboardCancelRegistered, s.keyboardMovementKeyNames = {}, {}
+    for _, movementName in ipairs(o.cfg("keyboardMovementKeys", {}) or {}) do
+        s.keyboardMovementKeyNames[normalizedKeyName(movementName)] = true
+    end
+    for _, configuredName in ipairs(o.cfg("keyboardCancelKeys") or {}) do
+        local cancelKeyName = tostring(configuredName or "")
+        local cancelId = normalizedKeyName(cancelKeyName)
+        local reserved = cancelId == "" or cancelId == normalizedKeyName(s.openKeyName)
+            or cancelId == normalizedKeyName(s.keyboardPageKeyName)
+            or cancelId == normalizedKeyName(s.settingsKeyName)
+            or cancelId == normalizedKeyName(s.mouseActivateKeyName)
+        if not reserved and s.keyboardCancelRegistered[cancelId] ~= true then
+            s.keyboardCancelRegistered[cancelId] = true
+            s.keyboardCancelInputs[#s.keyboardCancelInputs + 1] = {
+                name = cancelKeyName, key = o.makeFKey(cancelKeyName),
+            }
+        end
+    end
+    s.keyboardOpenWasDown = o.alive(pc) and o.isKeyDown(pc, s.openFKey) or false
+    s.keyboardToggleOpenArmed = false
+    s.keyboardToggleCloseArmed = false
+    s.keyboardPageWasDown = o.alive(pc)
+        and self:isInputActive(pc, s.keyboardPageFKey) or false
+    s.keyboardPagePressLocked = s.keyboardPageWasDown == true
+    s.keyboardPageReleaseSince = nil
+    return true
+end
+
 function InputRuntime:register()
     local o, s = self.options, self.options.state
-    s.openKeyName = string.upper(tostring(o.cfg("openKey") or ""))
-    if s.openKeyName == "" then o.log("FATAL: mappings.lua has no openKey", true) return false end
-    s.openUnrealKeyName = s.openKeyName
-    if type(o.cfg("unrealFKeyName", nil)) == "function" then
-        s.openUnrealKeyName = o.cfg("unrealFKeyName")(s.openKeyName)
-    end
-    s.openFKey = o.makeFKey(s.openUnrealKeyName)
-    s.keyValue = Key and Key[s.openKeyName] or nil
-    if s.keyValue == nil then
-        o.log("FATAL: Key table has no entry named " .. s.openKeyName, true)
-        return false
-    end
-    RegisterKeyBind(s.keyValue, self.openCallback)
-
-    s.settingsKeyName = string.upper(tostring(o.cfg("settingsKey") or ""))
-    s.settingsKeyValue = Key and Key[s.settingsKeyName] or nil
-    if s.settingsKeyValue ~= nil then RegisterKeyBind(s.settingsKeyValue, self.settingsCallback)
-    else o.log("WARNING: Key table has no settingsKey named " .. tostring(s.settingsKeyName), true) end
-
-    s.mouseActivateKeyName = string.upper(tostring(o.cfg("mouseActivateButton") or ""))
-    s.mouseActivateKeyValue = Key and Key[s.mouseActivateKeyName] or nil
+    s.mouseActivateKeyName = tostring(o.cfg("mouseActivateButton") or "")
+    local okMouseFKey, mouseFKey = pcall(o.makeFKey, s.mouseActivateKeyName)
+    s.mouseActivateFKey = okMouseFKey and mouseFKey or nil
+    local mouseActivateEnum = ue4ssKeyEnumName(o, s.mouseActivateKeyName)
+    s.mouseActivateKeyValue = Key and Key[mouseActivateEnum] or nil
     if s.mouseActivateKeyValue ~= nil then RegisterKeyBind(s.mouseActivateKeyValue, self.mouseCallback)
     else o.log("WARNING: Key table has no mouseActivateButton named "
         .. tostring(s.mouseActivateKeyName), true) end
 
-    s.keyboardPageKeyName = string.upper(tostring(o.cfg("keyboardPageButton") or ""))
-    s.keyboardPageKeyValue = Key and Key[s.keyboardPageKeyName] or nil
-    if s.keyboardPageKeyValue ~= nil then RegisterKeyBind(s.keyboardPageKeyValue, self.pageCallback)
-    else o.log("WARNING: Key table has no keyboardPageButton named " .. s.keyboardPageKeyName
-        .. "; keyboard wheel switching and picker cancel are unavailable", true) end
-
-    s.keyboardCancelRegistered, s.keyboardMovementKeyNames = {}, {}
-    for _, movementName in ipairs(o.cfg("keyboardMovementKeys", {}) or {}) do
-        s.keyboardMovementKeyNames[string.upper(tostring(movementName or ""))] = true
+    local bindingsOk, bindingsError = self:applyBindings(o.getPlayerController())
+    if not bindingsOk then
+        o.log("FATAL: " .. tostring(bindingsError), true)
+        return false
     end
-    for _, configuredName in ipairs(o.cfg("keyboardCancelKeys") or {}) do
-        local cancelKeyName = string.upper(tostring(configuredName or ""))
-        local reserved = cancelKeyName == "" or cancelKeyName == s.openKeyName
-            or cancelKeyName == s.keyboardPageKeyName or cancelKeyName == s.settingsKeyName
-            or cancelKeyName == s.mouseActivateKeyName
-        if not reserved and Key and Key[cancelKeyName] ~= nil
-            and s.keyboardCancelRegistered[cancelKeyName] ~= true then
-            s.keyboardCancelRegistered[cancelKeyName] = true
-            local unrealName = cancelKeyName
-            if type(o.cfg("unrealFKeyName", nil)) == "function" then
-                unrealName = o.cfg("unrealFKeyName")(cancelKeyName)
-            end
-            s.keyboardCancelInputs[#s.keyboardCancelInputs + 1] = {
-                name = cancelKeyName, key = o.makeFKey(unrealName),
-            }
-        end
+
+    local rightMouseValue = Key and Key.RIGHT_MOUSE_BUTTON or nil
+    if rightMouseValue ~= nil and rightMouseValue ~= s.mouseActivateKeyValue then
+        RegisterKeyBind(rightMouseValue, self.editorCancelCallback)
     end
     return true
 end
